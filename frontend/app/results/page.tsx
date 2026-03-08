@@ -40,7 +40,7 @@ export default async function ResultsPage() {
 
       {loadError ? (
         <section className="rounded-[2rem] border border-black bg-[#f1f1f1] p-5 text-sm text-black">
-          {loadError} Start the FastAPI backend and refresh this page.
+          {loadError} Start the Go backend and refresh this page.
         </section>
       ) : null}
 

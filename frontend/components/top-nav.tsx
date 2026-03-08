@@ -6,7 +6,8 @@ import { usePathname } from "next/navigation";
 const ITEMS = [
   { href: "/", label: "Portfolio" },
   { href: "/results", label: "Results" },
-];
+  { href: "/simulator", label: "Simulator" },
+] as const;
 
 export function TopNav() {
   const pathname = usePathname();
@@ -16,7 +17,9 @@ export function TopNav() {
       <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4 md:px-10">
         <div>
           <p className="text-[11px] uppercase tracking-[0.35em] text-black/45">Portfolio Manager</p>
-          <p className="mt-1 text-sm text-black/65">B3 import, holdings review, and quarterly checks.</p>
+          <p className="mt-1 text-sm text-black/65">
+            B3 import, holdings review, quarterly checks, and Monte Carlo simulation.
+          </p>
         </div>
         <nav className="flex items-center gap-2 rounded-full border border-black p-1">
           {ITEMS.map((item) => {

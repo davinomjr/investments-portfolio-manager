@@ -18,6 +18,7 @@ func New(svc *services.Service) http.Handler {
 	mux.HandleFunc("GET /portfolio", server.handlePortfolio)
 	mux.HandleFunc("GET /positions", server.handlePositions)
 	mux.HandleFunc("GET /stocks/latest-results", server.handleLatestResults)
+	mux.HandleFunc("GET /portfolio/monte-carlo", server.handleMonteCarlo)
 	mux.HandleFunc("POST /portfolio/import-b3", server.handleImportB3)
 	mux.HandleFunc("POST /portfolio/import-file", server.handleImportFile)
 	return withCORS(mux)
@@ -35,6 +36,18 @@ func (s *Server) handlePositions(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleLatestResults(w http.ResponseWriter, r *http.Request) {
 	resp, err := s.Service.GetLatestQuarterlyResults(r.Context())
+	writeJSON(w, resp, err, http.StatusOK)
+}
+
+func (s *Server) handleMonteCarlo(w http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query()
+	params := services.ParseMonteCarloParams(
+		query.Get("years"),
+		query.Get("simulations"),
+		query.Get("expected_return"),
+		query.Get("volatility"),
+	)
+	resp, err := s.Service.GetMonteCarloSimulation(r.Context(), params)
 	writeJSON(w, resp, err, http.StatusOK)
 }
 
