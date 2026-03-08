@@ -1,0 +1,845 @@
+package services
+
+import (
+	"archive/zip"
+	"context"
+	"database/sql"
+	"encoding/csv"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"math"
+	"mime/multipart"
+	"net/http"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"regexp"
+	"sort"
+	"strconv"
+	"strings"
+	"time"
+	"unicode"
+
+	"portfolio-manager/backend/internal/config"
+	"portfolio-manager/backend/internal/models"
+)
+
+type Service struct {
+	DB     *sql.DB
+	Config config.Config
+	Client *http.Client
+}
+
+func New(db *sql.DB, cfg config.Config) *Service {
+	return &Service{
+		DB:     db,
+		Config: cfg,
+		Client: &http.Client{Timeout: 60 * time.Second},
+	}
+}
+
+func (s *Service) ImportB3(ctx context.Context) (models.ImportJobResponse, error) {
+	jobID, _, err := s.createJob(ctx, "b3", "running", "Import started")
+	if err != nil {
+		return models.ImportJobResponse{}, err
+	}
+	holdings, err := s.runWorker(ctx, []string{"import", "--json"})
+	if err != nil {
+		updated, _ := s.updateJob(ctx, jobID, "requires_login", err.Error())
+		return updated, nil
+	}
+	if err := s.upsertHoldings(ctx, holdings); err != nil {
+		updated, _ := s.updateJob(ctx, jobID, "failed", err.Error())
+		return updated, nil
+	}
+	return s.updateJob(ctx, jobID, "completed", fmt.Sprintf("Imported %d positions from B3", len(holdings)))
+}
+
+func (s *Service) ImportFile(ctx context.Context, file multipart.File, filename string) (models.ImportJobResponse, error) {
+	if err := os.MkdirAll(s.Config.UploadDir, 0o755); err != nil {
+		return models.ImportJobResponse{}, err
+	}
+	tmp, err := os.CreateTemp(s.Config.UploadDir, "upload-*"+filepath.Ext(filename))
+	if err != nil {
+		return models.ImportJobResponse{}, err
+	}
+	defer os.Remove(tmp.Name())
+	defer tmp.Close()
+	if _, err := io.Copy(tmp, file); err != nil {
+		return models.ImportJobResponse{}, err
+	}
+
+	jobID, _, err := s.createJob(ctx, "manual_b3_export", "running", "Importing "+filename)
+	if err != nil {
+		return models.ImportJobResponse{}, err
+	}
+	holdings, err := s.runWorker(ctx, []string{"import-file", tmp.Name(), "--json"})
+	if err != nil {
+		updated, _ := s.updateJob(ctx, jobID, "failed", err.Error())
+		return updated, nil
+	}
+	if err := s.upsertHoldings(ctx, holdings); err != nil {
+		updated, _ := s.updateJob(ctx, jobID, "failed", err.Error())
+		return updated, nil
+	}
+	return s.updateJob(ctx, jobID, "completed", fmt.Sprintf("Imported %d positions from %s", len(holdings), filename))
+}
+
+func (s *Service) GetPositions(ctx context.Context) ([]models.PositionResponse, error) {
+	rows, err := s.DB.QueryContext(ctx, `
+		SELECT a.ticker, a.asset_type, p.quantity, p.avg_price, COALESCE(p.broker,''), p.source, p.last_updated
+		FROM positions p
+		JOIN assets a ON a.id = p.asset_id
+		ORDER BY datetime(p.last_updated) DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []models.PositionResponse
+	for rows.Next() {
+		var item models.PositionResponse
+		if err := rows.Scan(&item.Ticker, &item.AssetType, &item.Quantity, &item.AvgPrice, &item.Broker, &item.Source, &item.LastUpdated); err != nil {
+			return nil, err
+		}
+		out = append(out, item)
+	}
+	return out, rows.Err()
+}
+
+func (s *Service) GetPortfolio(ctx context.Context) (models.PortfolioResponse, error) {
+	rows, err := s.DB.QueryContext(ctx, `
+		SELECT a.ticker, a.asset_type, p.quantity, p.avg_price
+		FROM positions p
+		JOIN assets a ON a.id = p.asset_id`)
+	if err != nil {
+		return models.PortfolioResponse{}, err
+	}
+	defer rows.Close()
+
+	type alloc struct {
+		assetType string
+		value     float64
+	}
+	allocByTicker := map[string]alloc{}
+	total := 0.0
+	count := 0
+	for rows.Next() {
+		count++
+		var ticker, assetType string
+		var qty, price float64
+		if err := rows.Scan(&ticker, &assetType, &qty, &price); err != nil {
+			return models.PortfolioResponse{}, err
+		}
+		value := qty * price
+		total += value
+		allocByTicker[ticker] = alloc{assetType: assetType, value: value}
+	}
+	var allocations []models.AllocationItem
+	for ticker, item := range allocByTicker {
+		weight := 0.0
+		if total > 0 {
+			weight = item.value / total
+		}
+		allocations = append(allocations, models.AllocationItem{
+			Ticker: ticker, AssetType: item.assetType, MarketValue: item.value, Weight: weight,
+		})
+	}
+	sort.Slice(allocations, func(i, j int) bool { return allocations[i].MarketValue > allocations[j].MarketValue })
+	return models.PortfolioResponse{
+		TotalPositions: count, EstimatedCostBasis: total, Allocations: allocations,
+	}, nil
+}
+
+func (s *Service) GetLatestQuarterlyResults(ctx context.Context) (models.QuarterlyResultsResponse, error) {
+	tracked, err := s.loadTrackedAssets(ctx)
+	if err != nil {
+		return models.QuarterlyResultsResponse{}, err
+	}
+	if len(tracked) == 0 {
+		return models.QuarterlyResultsResponse{
+			Provider: "cvm_itr", Configured: true, Message: "No stock positions were found in the imported portfolio.", Items: []models.QuarterlyResultItem{},
+		}, nil
+	}
+	needsMetadata := true
+	for _, item := range tracked {
+		if item.CompanyName != "" || item.TaxID != "" {
+			needsMetadata = false
+			break
+		}
+	}
+	if needsMetadata {
+		items := make([]models.QuarterlyResultItem, 0, len(tracked))
+		for _, asset := range tracked {
+			items = append(items, models.QuarterlyResultItem{
+				Ticker: asset.Ticker, AssetType: asset.AssetType, Highlights: []string{}, Status: "metadata_missing", Message: "Issuer metadata is missing for this position.",
+			})
+		}
+		return models.QuarterlyResultsResponse{
+			Provider: "cvm_itr", Configured: true, Message: "Re-upload the B3 workbook once so issuer metadata is stored before CVM matching runs.", Items: items,
+		}, nil
+	}
+	rows, year, err := s.loadLatestITRRows(ctx)
+	if err != nil || len(rows) == 0 {
+		items := make([]models.QuarterlyResultItem, 0, len(tracked))
+		for _, asset := range tracked {
+			items = append(items, models.QuarterlyResultItem{
+				Ticker: asset.Ticker, CompanyName: asset.CompanyName, AssetType: asset.AssetType, Highlights: []string{}, Status: "unavailable", Message: "CVM ITR dataset unavailable.",
+			})
+		}
+		return models.QuarterlyResultsResponse{Provider: "cvm_itr", Configured: true, Message: "CVM quarterly files could not be loaded right now.", Items: items}, nil
+	}
+	taxIndex := indexByTaxID(rows)
+	nameIndex := indexByName(rows)
+	items := make([]models.QuarterlyResultItem, 0, len(tracked))
+	for _, asset := range tracked {
+		items = append(items, buildQuarterlyResult(asset, taxIndex, nameIndex))
+	}
+	return models.QuarterlyResultsResponse{
+		Provider:   "cvm_itr",
+		Configured: true,
+		Message:    fmt.Sprintf("Source: CVM ITR %d. Latest reported quarter is inferred from filing periods.", year),
+		Items:      items,
+	}, nil
+}
+
+func (s *Service) createJob(ctx context.Context, source, status, detail string) (int64, models.ImportJobResponse, error) {
+	now := time.Now().UTC().Format(time.RFC3339)
+	result, err := s.DB.ExecContext(ctx, `INSERT INTO import_jobs(source,status,detail,created_at,updated_at) VALUES(?,?,?,?,?)`, source, status, detail, now, now)
+	if err != nil {
+		return 0, models.ImportJobResponse{}, err
+	}
+	id, err := result.LastInsertId()
+	if err != nil {
+		return 0, models.ImportJobResponse{}, err
+	}
+	return id, models.ImportJobResponse{ID: id, Source: source, Status: status, Detail: detail, CreatedAt: now, UpdatedAt: now}, nil
+}
+
+func (s *Service) updateJob(ctx context.Context, id int64, status, detail string) (models.ImportJobResponse, error) {
+	now := time.Now().UTC().Format(time.RFC3339)
+	if _, err := s.DB.ExecContext(ctx, `UPDATE import_jobs SET status=?, detail=?, updated_at=? WHERE id=?`, status, detail, now, id); err != nil {
+		return models.ImportJobResponse{}, err
+	}
+	var resp models.ImportJobResponse
+	err := s.DB.QueryRowContext(ctx, `SELECT id, source, status, COALESCE(detail,''), created_at, updated_at FROM import_jobs WHERE id=?`, id).
+		Scan(&resp.ID, &resp.Source, &resp.Status, &resp.Detail, &resp.CreatedAt, &resp.UpdatedAt)
+	return resp, err
+}
+
+func (s *Service) runWorker(ctx context.Context, args []string) ([]models.HoldingPayload, error) {
+	var cmd *exec.Cmd
+	if strings.TrimSpace(s.Config.WorkerCommand) != "" {
+		parts := strings.Fields(s.Config.WorkerCommand)
+		cmd = exec.CommandContext(ctx, parts[0], parts[1:]...)
+	} else {
+		all := append([]string{"-m", s.Config.WorkerModule}, args...)
+		cmd = exec.CommandContext(ctx, s.Config.WorkerPython, all...)
+	}
+	cmd.Dir = s.Config.WorkerDir
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		msg := strings.TrimSpace(string(output))
+		if msg == "" {
+			msg = err.Error()
+		}
+		return nil, errors.New(msg)
+	}
+	var payload models.WorkerImportResponse
+	if err := json.Unmarshal(output, &payload); err != nil {
+		return nil, err
+	}
+	for i := range payload.Holdings {
+		payload.Holdings[i].Ticker = strings.ToUpper(payload.Holdings[i].Ticker)
+		if payload.Holdings[i].Currency == "" {
+			payload.Holdings[i].Currency = "BRL"
+		}
+	}
+	return payload.Holdings, nil
+}
+
+func (s *Service) upsertHoldings(ctx context.Context, holdings []models.HoldingPayload) error {
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	now := time.Now().UTC().Format(time.RFC3339)
+	for _, holding := range holdings {
+		var assetID int64
+		err := tx.QueryRowContext(ctx, `SELECT id FROM assets WHERE ticker=?`, holding.Ticker).Scan(&assetID)
+		if errors.Is(err, sql.ErrNoRows) {
+			res, err := tx.ExecContext(ctx, `INSERT INTO assets(ticker,asset_type,currency) VALUES(?,?,?)`, holding.Ticker, holding.AssetType, defaultString(holding.Currency, "BRL"))
+			if err != nil {
+				return err
+			}
+			assetID, _ = res.LastInsertId()
+		} else if err != nil {
+			return err
+		} else {
+			if _, err := tx.ExecContext(ctx, `UPDATE assets SET asset_type=?, currency=? WHERE id=?`, holding.AssetType, defaultString(holding.Currency, "BRL"), assetID); err != nil {
+				return err
+			}
+		}
+
+		var metadataID int64
+		err = tx.QueryRowContext(ctx, `SELECT id FROM asset_metadata WHERE asset_id=?`, assetID).Scan(&metadataID)
+		if errors.Is(err, sql.ErrNoRows) {
+			if _, err := tx.ExecContext(ctx, `INSERT INTO asset_metadata(asset_id, company_name, tax_id, last_updated) VALUES(?,?,?,?)`, assetID, nullIfEmpty(holding.CompanyName), nullIfEmpty(holding.TaxID), now); err != nil {
+				return err
+			}
+		} else if err == nil {
+			if _, err := tx.ExecContext(ctx, `UPDATE asset_metadata SET company_name=COALESCE(?, company_name), tax_id=COALESCE(?, tax_id), last_updated=? WHERE asset_id=?`, nullIfEmpty(holding.CompanyName), nullIfEmpty(holding.TaxID), now, assetID); err != nil {
+				return err
+			}
+		} else {
+			return err
+		}
+
+		var posID int64
+		err = tx.QueryRowContext(ctx, `SELECT id FROM positions WHERE user_id=? AND asset_id=?`, s.Config.DefaultUserID, assetID).Scan(&posID)
+		if errors.Is(err, sql.ErrNoRows) {
+			if _, err := tx.ExecContext(ctx, `INSERT INTO positions(user_id,asset_id,quantity,avg_price,broker,source,last_updated) VALUES(?,?,?,?,?,?,?)`, s.Config.DefaultUserID, assetID, holding.Quantity, holding.AveragePrice, nullIfEmpty(holding.Broker), "b3", now); err != nil {
+				return err
+			}
+		} else if err == nil {
+			if _, err := tx.ExecContext(ctx, `UPDATE positions SET quantity=?, avg_price=?, broker=?, source='b3', last_updated=? WHERE id=?`, holding.Quantity, holding.AveragePrice, nullIfEmpty(holding.Broker), now, posID); err != nil {
+				return err
+			}
+		} else {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+func defaultString(value, fallback string) string {
+	if strings.TrimSpace(value) == "" {
+		return fallback
+	}
+	return value
+}
+
+func nullIfEmpty(value string) any {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	return value
+}
+
+type cvmRow map[string]string
+
+func (s *Service) loadTrackedAssets(ctx context.Context) ([]models.TrackedAsset, error) {
+	rows, err := s.DB.QueryContext(ctx, `
+		SELECT DISTINCT a.ticker, a.asset_type, COALESCE(m.company_name,''), COALESCE(m.tax_id,'')
+		FROM assets a
+		JOIN positions p ON p.asset_id = a.id
+		LEFT JOIN asset_metadata m ON m.asset_id = a.id
+		WHERE p.source='b3' AND a.asset_type IN ('stock','bdr')`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []models.TrackedAsset
+	for rows.Next() {
+		var item models.TrackedAsset
+		if err := rows.Scan(&item.Ticker, &item.AssetType, &item.CompanyName, &item.TaxID); err != nil {
+			return nil, err
+		}
+		out = append(out, item)
+	}
+	return out, rows.Err()
+}
+
+func (s *Service) loadLatestITRRows(ctx context.Context) ([]cvmRow, int, error) {
+	year := time.Now().Year()
+	for _, candidate := range []int{year, year - 1, year - 2} {
+		path, err := s.ensureITRZip(ctx, candidate)
+		if err != nil {
+			continue
+		}
+		rows, err := readDRERows(path)
+		if err == nil && len(rows) > 0 {
+			return rows, candidate, nil
+		}
+	}
+	return nil, 0, errors.New("no ITR rows available")
+}
+
+func (s *Service) ensureITRZip(ctx context.Context, year int) (string, error) {
+	if err := os.MkdirAll(s.Config.DataCacheDir, 0o755); err != nil {
+		return "", err
+	}
+	target := filepath.Join(s.Config.DataCacheDir, fmt.Sprintf("itr_cia_aberta_%d.zip", year))
+	if _, err := os.Stat(target); err == nil {
+		return target, nil
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/itr_cia_aberta_%d.zip", s.Config.CVMITRBaseURL, year), nil)
+	if err != nil {
+		return "", err
+	}
+	resp, err := s.Client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		return "", fmt.Errorf("cvm returned status %d", resp.StatusCode)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+	return target, os.WriteFile(target, body, 0o644)
+}
+
+func readDRERows(zipPath string) ([]cvmRow, error) {
+	reader, err := zip.OpenReader(zipPath)
+	if err != nil {
+		return nil, err
+	}
+	defer reader.Close()
+	var files []*zip.File
+	for _, file := range reader.File {
+		if strings.Contains(file.Name, "DRE_con") {
+			files = append(files, file)
+		}
+	}
+	if len(files) == 0 {
+		for _, file := range reader.File {
+			if strings.Contains(file.Name, "DRE_ind") {
+				files = append(files, file)
+			}
+		}
+	}
+	var rows []cvmRow
+	for _, file := range files {
+		rc, err := file.Open()
+		if err != nil {
+			return nil, err
+		}
+		content, err := io.ReadAll(rc)
+		rc.Close()
+		if err != nil {
+			return nil, err
+		}
+		reader := csv.NewReader(strings.NewReader(decodeLatin1(content)))
+		reader.Comma = ';'
+		reader.LazyQuotes = true
+		headers, err := reader.Read()
+		if err != nil {
+			return nil, err
+		}
+		for {
+			record, err := reader.Read()
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			if err != nil {
+				return nil, err
+			}
+			row := cvmRow{}
+			for i, header := range headers {
+				if i < len(record) {
+					row[header] = strings.TrimSpace(record[i])
+				}
+			}
+			rows = append(rows, row)
+		}
+	}
+	return rows, nil
+}
+
+func indexByTaxID(rows []cvmRow) map[string][]cvmRow {
+	out := map[string][]cvmRow{}
+	for _, row := range rows {
+		taxID := normalizeTaxID(row["CNPJ_CIA"])
+		if taxID == "" {
+			continue
+		}
+		out[taxID] = append(out[taxID], row)
+	}
+	return out
+}
+
+func indexByName(rows []cvmRow) map[string][]cvmRow {
+	out := map[string][]cvmRow{}
+	for _, row := range rows {
+		key := normalizeCompanyName(row["DENOM_CIA"])
+		if key == "" {
+			continue
+		}
+		out[key] = append(out[key], row)
+	}
+	return out
+}
+
+func buildQuarterlyResult(asset models.TrackedAsset, taxIndex map[string][]cvmRow, nameIndex map[string][]cvmRow) models.QuarterlyResultItem {
+	var companyRows []cvmRow
+	if asset.TaxID != "" {
+		companyRows = taxIndex[asset.TaxID]
+	}
+	if len(companyRows) == 0 && asset.CompanyName != "" {
+		companyRows = matchCompanyRows(asset.CompanyName, nameIndex)
+	}
+	if len(companyRows) == 0 {
+		return models.QuarterlyResultItem{Ticker: asset.Ticker, CompanyName: asset.CompanyName, AssetType: asset.AssetType, Highlights: []string{}, Status: "unavailable", Message: "No matching company was found in CVM ITR data for this holding."}
+	}
+	quarterRows := selectLatestQuarterRows(companyRows)
+	if len(quarterRows) == 0 {
+		return models.QuarterlyResultItem{Ticker: asset.Ticker, CompanyName: asset.CompanyName, AssetType: asset.AssetType, Highlights: []string{}, Status: "unavailable", Message: "No quarter-length DRE rows were found for the latest filing period."}
+	}
+	revenue := extractRevenueMetric(quarterRows)
+	netIncome := extractMetric(quarterRows, map[string]bool{"3.11": true, "3.13": true, "3.11.01": true}, []string{"LUCRO", "PREJU", "PERIODO"})
+	reportDate := firstNonEmpty(quarterRows[0]["DT_FIM_EXERC"], quarterRows[0]["DT_REFER"])
+	var margin *float64
+	if revenue != nil && netIncome != nil && *revenue != 0 {
+		v := (*netIncome / *revenue) * 100
+		margin = &v
+	}
+	if revenue == nil && netIncome == nil {
+		return models.QuarterlyResultItem{
+			Ticker: asset.Ticker, CompanyName: firstNonEmpty(asset.CompanyName, quarterRows[0]["DENOM_CIA"]), AssetType: asset.AssetType, ReportDate: reportDate,
+			Highlights: []string{}, Status: "unavailable", Message: "Matched CVM company, but revenue and net income were not found in the latest DRE quarter rows.",
+		}
+	}
+	return models.QuarterlyResultItem{
+		Ticker: asset.Ticker, CompanyName: firstNonEmpty(asset.CompanyName, quarterRows[0]["DENOM_CIA"]), AssetType: asset.AssetType, ReportDate: reportDate,
+		Revenue: revenue, NetIncome: netIncome, EBITDA: nil, NetMargin: margin, Highlights: buildHighlights(revenue, netIncome, margin), Status: "ok",
+	}
+}
+
+func matchCompanyRows(company string, idx map[string][]cvmRow) []cvmRow {
+	key := normalizeCompanyName(company)
+	if rows, ok := idx[key]; ok {
+		return rows
+	}
+	target := tokenSet(key)
+	best := ""
+	bestScore := 0.0
+	for candidate := range idx {
+		score := jaccard(target, tokenSet(candidate))
+		if score > bestScore {
+			bestScore = score
+			best = candidate
+		}
+	}
+	if best != "" && bestScore >= 0.45 {
+		return idx[best]
+	}
+	return nil
+}
+
+func selectLatestQuarterRows(rows []cvmRow) []cvmRow {
+	var latest time.Time
+	for _, row := range rows {
+		if dt := parseDate(firstNonEmpty(row["DT_FIM_EXERC"], row["DT_REFER"])); dt.After(latest) {
+			latest = dt
+		}
+	}
+	if latest.IsZero() {
+		return nil
+	}
+	var current []cvmRow
+	for _, row := range rows {
+		if parseDate(firstNonEmpty(row["DT_FIM_EXERC"], row["DT_REFER"])).Equal(latest) && normalizeUpper(row["ORDEM_EXERC"]) == "ULTIMO" {
+			current = append(current, row)
+		}
+	}
+	if len(current) == 0 {
+		for _, row := range rows {
+			if parseDate(firstNonEmpty(row["DT_FIM_EXERC"], row["DT_REFER"])).Equal(latest) {
+				current = append(current, row)
+			}
+		}
+	}
+	grouped := map[string][]cvmRow{}
+	for _, row := range current {
+		key := row["DT_INI_EXERC"] + "|" + firstNonEmpty(row["DT_FIM_EXERC"], row["DT_REFER"])
+		grouped[key] = append(grouped[key], row)
+	}
+	type group struct {
+		days int
+		rows []cvmRow
+	}
+	var quarterGroups []group
+	for key, rows := range grouped {
+		parts := strings.Split(key, "|")
+		if len(parts) != 2 {
+			continue
+		}
+		start, end := parseDate(parts[0]), parseDate(parts[1])
+		if start.IsZero() || end.IsZero() {
+			continue
+		}
+		days := int(end.Sub(start).Hours() / 24)
+		if days >= 70 && days <= 120 {
+			quarterGroups = append(quarterGroups, group{days: days, rows: rows})
+		}
+	}
+	if len(quarterGroups) > 0 {
+		sort.Slice(quarterGroups, func(i, j int) bool { return quarterGroups[i].days < quarterGroups[j].days })
+		return latestVersionRows(quarterGroups[0].rows)
+	}
+	return latestVersionRows(current)
+}
+
+func latestVersionRows(rows []cvmRow) []cvmRow {
+	best := 0
+	for _, row := range rows {
+		if v, _ := strconv.Atoi(strings.TrimSpace(row["VERSAO"])); v > best {
+			best = v
+		}
+	}
+	var out []cvmRow
+	for _, row := range rows {
+		if v, _ := strconv.Atoi(strings.TrimSpace(row["VERSAO"])); v == best {
+			out = append(out, row)
+		}
+	}
+	return out
+}
+
+func extractMetric(rows []cvmRow, codes map[string]bool, tokens []string) *float64 {
+	for _, row := range rows {
+		if codes[strings.TrimSpace(row["CD_CONTA"])] {
+			if value := rowValue(row); value != nil {
+				return value
+			}
+		}
+	}
+	for _, row := range rows {
+		desc := normalizeCompanyName(row["DS_CONTA"])
+		match := true
+		for _, token := range tokens {
+			if !strings.Contains(desc, normalizeCompanyName(token)) {
+				match = false
+				break
+			}
+		}
+		if match {
+			if value := rowValue(row); value != nil {
+				return value
+			}
+		}
+	}
+	return nil
+}
+
+func extractRevenueMetric(rows []cvmRow) *float64 {
+	if value := extractMetric(rows, map[string]bool{"3.01": true}, []string{"RECEITA"}); value != nil && *value != 0 {
+		return value
+	}
+	type candidate struct {
+		value float64
+		desc  string
+	}
+	var candidates []candidate
+	for _, row := range rows {
+		desc := normalizeCompanyName(row["DS_CONTA"])
+		if !strings.Contains(desc, "RECEITA") || strings.Contains(desc, "FINANCEIRA") {
+			continue
+		}
+		value := rowValue(row)
+		if value == nil || *value <= 0 {
+			continue
+		}
+		candidates = append(candidates, candidate{value: *value, desc: desc})
+	}
+	if len(candidates) == 0 {
+		return nil
+	}
+	priorities := [][]string{
+		{"PRESTACAO", "SERVICOS"},
+		{"OUTRAS", "RECEITAS", "OPERACIONAIS"},
+		{"RECEITAS", "OPERACIONAIS"},
+	}
+	for _, tokens := range priorities {
+		best := -1.0
+		for _, cand := range candidates {
+			match := true
+			for _, token := range tokens {
+				if !strings.Contains(cand.desc, token) {
+					match = false
+					break
+				}
+			}
+			if match && cand.value > best {
+				best = cand.value
+			}
+		}
+		if best >= 0 {
+			return &best
+		}
+	}
+	best := candidates[0].value
+	for _, cand := range candidates[1:] {
+		if cand.value > best {
+			best = cand.value
+		}
+	}
+	return &best
+}
+
+func rowValue(row cvmRow) *float64 {
+	raw := strings.TrimSpace(row["VL_CONTA"])
+	if raw == "" {
+		return nil
+	}
+	value, err := parseCVMNumber(raw)
+	if err != nil {
+		return nil
+	}
+	scale := 1.0
+	switch normalizeUpper(row["ESCALA_MOEDA"]) {
+	case "MIL", "MILHAR", "MILHARES", "R$ MIL":
+		scale = 1000
+	case "MILHAO", "MILHOES", "R$ MILHOES":
+		scale = 1_000_000
+	}
+	result := value * scale
+	return &result
+}
+
+func parseCVMNumber(raw string) (float64, error) {
+	text := strings.TrimSpace(raw)
+	if text == "" {
+		return 0, errors.New("empty")
+	}
+	if strings.Contains(text, ",") && strings.Contains(text, ".") {
+		text = strings.ReplaceAll(text, ".", "")
+		text = strings.ReplaceAll(text, ",", ".")
+	} else if strings.Contains(text, ",") {
+		text = strings.ReplaceAll(text, ".", "")
+		text = strings.ReplaceAll(text, ",", ".")
+	}
+	return strconv.ParseFloat(text, 64)
+}
+
+func normalizeTaxID(value string) string {
+	var b strings.Builder
+	for _, r := range value {
+		if unicode.IsDigit(r) {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+func normalizeCompanyName(value string) string {
+	text := strings.ToUpper(strings.TrimSpace(value))
+	replacements := map[string]string{
+		"S.A.":  "SA",
+		"S/A":   "SA",
+		" BCO ": " BANCO ",
+		" CIA ": " COMPANHIA ",
+	}
+	for old, newValue := range replacements {
+		text = strings.ReplaceAll(text, old, newValue)
+	}
+	text = removeAccents(text)
+	reg := regexp.MustCompile(`[^A-Z0-9 ]`)
+	text = reg.ReplaceAllString(text, " ")
+	return strings.Join(strings.Fields(text), " ")
+}
+
+func normalizeUpper(value string) string {
+	return strings.ReplaceAll(removeAccents(strings.ToUpper(strings.TrimSpace(value))), "Ú", "U")
+}
+
+func removeAccents(value string) string {
+	replacer := strings.NewReplacer(
+		"Á", "A", "À", "A", "Â", "A", "Ã", "A", "Ä", "A",
+		"É", "E", "È", "E", "Ê", "E", "Ë", "E",
+		"Í", "I", "Ì", "I", "Î", "I", "Ï", "I",
+		"Ó", "O", "Ò", "O", "Ô", "O", "Õ", "O", "Ö", "O",
+		"Ú", "U", "Ù", "U", "Û", "U", "Ü", "U",
+		"Ç", "C",
+	)
+	return replacer.Replace(value)
+}
+
+func decodeLatin1(content []byte) string {
+	runes := make([]rune, len(content))
+	for i, b := range content {
+		runes[i] = rune(b)
+	}
+	return string(runes)
+}
+
+func parseDate(value string) time.Time {
+	for _, layout := range []string{"2006-01-02", "02/01/2006"} {
+		if dt, err := time.Parse(layout, value); err == nil {
+			return dt
+		}
+	}
+	return time.Time{}
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func buildHighlights(revenue, netIncome, margin *float64) []string {
+	var out []string
+	if revenue != nil {
+		out = append(out, "Revenue "+formatBRL(*revenue))
+	}
+	if netIncome != nil {
+		out = append(out, "Net income "+formatBRL(*netIncome))
+	}
+	if margin != nil {
+		out = append(out, fmt.Sprintf("Net margin %.1f%%", *margin))
+	}
+	return out
+}
+
+func formatBRL(value float64) string {
+	sign := ""
+	if value < 0 {
+		sign = "-"
+		value = math.Abs(value)
+	}
+	switch {
+	case value >= 1_000_000_000:
+		return fmt.Sprintf("%sR$ %.2fB", sign, value/1_000_000_000)
+	case value >= 1_000_000:
+		return fmt.Sprintf("%sR$ %.2fM", sign, value/1_000_000)
+	case value >= 1_000:
+		return fmt.Sprintf("%sR$ %.1fK", sign, value/1_000)
+	default:
+		return fmt.Sprintf("%sR$ %.2f", sign, value)
+	}
+}
+
+func tokenSet(value string) map[string]struct{} {
+	out := map[string]struct{}{}
+	for _, token := range strings.Fields(value) {
+		out[token] = struct{}{}
+	}
+	return out
+}
+
+func jaccard(a, b map[string]struct{}) float64 {
+	if len(a) == 0 || len(b) == 0 {
+		return 0
+	}
+	inter := 0
+	union := map[string]struct{}{}
+	for key := range a {
+		union[key] = struct{}{}
+		if _, ok := b[key]; ok {
+			inter++
+		}
+	}
+	for key := range b {
+		union[key] = struct{}{}
+	}
+	return float64(inter) / float64(len(union))
+}

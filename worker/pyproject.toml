@@ -1,0 +1,13 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "portfolio-manager-worker"
+version = "0.1.0"
+dependencies = [
+  "playwright>=1.52.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]

@@ -1,0 +1,65 @@
+import type { Position } from "@/lib/api";
+import { getAssetStyle } from "@/lib/asset-style";
+
+function formatCurrency(value: number) {
+  return new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+    maximumFractionDigits: 2,
+  }).format(value);
+}
+
+function formatDate(value: string) {
+  return new Intl.DateTimeFormat("pt-BR", {
+    dateStyle: "short",
+    timeStyle: "short",
+  }).format(new Date(value));
+}
+
+export function PositionsTable({ positions }: { positions: Position[] }) {
+  return (
+    <section className="rounded-[2rem] border border-black bg-white p-6">
+      <div className="mb-6">
+        <p className="text-xs uppercase tracking-[0.3em] text-black/55">Positions</p>
+        <h2 className="mt-2 text-2xl font-semibold">Imported holdings</h2>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="min-w-full border-separate border-spacing-y-2 text-left text-sm">
+          <thead className="text-black/50">
+            <tr>
+              <th className="pb-2 pr-4">Ticker</th>
+              <th className="pb-2 pr-4">Type</th>
+              <th className="pb-2 pr-4">Quantity</th>
+              <th className="pb-2 pr-4">Avg/Close</th>
+              <th className="pb-2 pr-4">Broker</th>
+              <th className="pb-2">Updated</th>
+            </tr>
+          </thead>
+          <tbody>
+            {positions.map((position) => (
+              <tr key={position.ticker} className="rounded-2xl border border-black bg-[#f6f6f6]">
+                <td className="rounded-l-2xl px-4 py-3 font-semibold">{position.ticker}</td>
+                <td className="px-4 py-3">
+                  <span
+                    className="inline-flex rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em]"
+                    style={{
+                      backgroundColor: getAssetStyle(position.asset_type).soft,
+                      borderColor: getAssetStyle(position.asset_type).border,
+                      color: getAssetStyle(position.asset_type).text,
+                    }}
+                  >
+                    {getAssetStyle(position.asset_type).label}
+                  </span>
+                </td>
+                <td className="px-4 py-3">{position.quantity}</td>
+                <td className="px-4 py-3">{formatCurrency(position.avg_price)}</td>
+                <td className="px-4 py-3">{position.broker ?? "-"}</td>
+                <td className="rounded-r-2xl px-4 py-3">{formatDate(position.last_updated)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
