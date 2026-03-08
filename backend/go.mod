@@ -1,4 +1,4 @@
-module portfolio-manager/backend
+module investments-portfolio-manager/backend
 
 go 1.24.5
 

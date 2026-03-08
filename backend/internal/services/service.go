@@ -22,8 +22,8 @@ import (
 	"time"
 	"unicode"
 
-	"portfolio-manager/backend/internal/config"
-	"portfolio-manager/backend/internal/models"
+	"investments-portfolio-manager/backend/internal/config"
+	"investments-portfolio-manager/backend/internal/models"
 )
 
 type Service struct {

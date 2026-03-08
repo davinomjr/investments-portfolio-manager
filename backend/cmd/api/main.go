@@ -5,10 +5,10 @@ import (
 	"net/http"
 	"os"
 
-	"portfolio-manager/backend/internal/config"
-	"portfolio-manager/backend/internal/db"
-	"portfolio-manager/backend/internal/httpapi"
-	"portfolio-manager/backend/internal/services"
+	"investments-portfolio-manager/backend/internal/config"
+	"investments-portfolio-manager/backend/internal/db"
+	"investments-portfolio-manager/backend/internal/httpapi"
+	"investments-portfolio-manager/backend/internal/services"
 )
 
 func main() {

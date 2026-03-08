@@ -33,7 +33,7 @@ Planned next:
 ## Run the Go backend
 
 ```bash
-cd /path/to/portfolio-manager
+cd /path/to/investments-portfolio-manager
 make run backend
 ```
 
@@ -42,7 +42,7 @@ The API runs on `http://127.0.0.1:8000` by default.
 ## Run the frontend
 
 ```bash
-cd /path/to/portfolio-manager
+cd /path/to/investments-portfolio-manager
 make run frontend
 ```
 
@@ -93,7 +93,7 @@ Notes:
 ## Legacy Python backend
 
 ```bash
-cd /path/to/portfolio-manager
+cd /path/to/investments-portfolio-manager
 make run backend-python
 ```
 
