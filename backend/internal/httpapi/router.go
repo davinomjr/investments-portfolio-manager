@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	"portfolio-manager/backend/internal/services"
+	"investments-portfolio-manager/backend/internal/services"
 )
 
 type Server struct {
