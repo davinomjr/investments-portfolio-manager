@@ -332,6 +332,24 @@ func (s *Service) GetLatestQuarterlyResults(ctx context.Context) (models.Quarter
 	}, nil
 }
 
+func (s *Service) GetTickerSentiment(ctx context.Context, ticker string) (*models.TickerSentiment, error) {
+	var asset models.TrackedAsset
+	err := s.DB.QueryRowContext(ctx, `
+		SELECT a.id, a.ticker, a.asset_type, COALESCE(m.company_name,''), COALESCE(m.tax_id,'')
+		FROM assets a
+		LEFT JOIN asset_metadata m ON m.asset_id = a.id
+		WHERE a.ticker=?`, strings.ToUpper(ticker)).
+		Scan(&asset.AssetID, &asset.Ticker, &asset.AssetType, &asset.CompanyName, &asset.TaxID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	sentiment := s.GetOrRefreshSentiment(ctx, asset)
+	return sentiment, nil
+}
+
 func (s *Service) GetLatestImportJob(ctx context.Context) (models.ImportJobResponse, error) {
 	var resp models.ImportJobResponse
 	err := s.DB.QueryRowContext(ctx, `SELECT id, source, status, COALESCE(detail,''), created_at, updated_at FROM import_jobs ORDER BY id DESC LIMIT 1`).
