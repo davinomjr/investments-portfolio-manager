@@ -42,18 +42,18 @@ export function UploadPanel() {
   };
 
   return (
-    <section className="rounded-[2rem] border border-black bg-white p-6 shadow-[0_18px_60px_rgba(0,0,0,0.08)]">
+    <section className="rounded-[2rem] border border-white/15 bg-[#151820] p-6 shadow-[0_18px_60px_rgba(0,0,0,0.25)]">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <p className="text-xs uppercase tracking-[0.3em] text-black/55">B3 Manual Import</p>
+          <p className="text-xs uppercase tracking-[0.3em] text-white/55">B3 Manual Import</p>
           <h2 className="mt-2 text-2xl font-semibold">Load a fresh portfolio snapshot</h2>
         </div>
-        <label className="inline-flex cursor-pointer items-center justify-center rounded-full border border-black bg-black px-5 py-3 text-sm font-semibold text-white transition hover:bg-white hover:text-black">
+        <label className="inline-flex cursor-pointer items-center justify-center rounded-full border border-white bg-white px-5 py-3 text-sm font-semibold text-[#0d0f14] transition hover:bg-transparent hover:text-white">
           {isPending ? "Importing..." : "Choose B3 file"}
           <input className="hidden" type="file" accept=".xlsx,.xlsm,.csv" onChange={onChange} disabled={isPending} />
         </label>
       </div>
-      <p className="mt-4 text-sm text-black/65">{message}</p>
+      <p className="mt-4 text-sm text-white/65">{message}</p>
     </section>
   );
 }

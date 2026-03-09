@@ -15,16 +15,16 @@ export function SummaryCards({ portfolio }: { portfolio: Portfolio }) {
 
   return (
     <section className="grid gap-4 md:grid-cols-3">
-      <article className="rounded-[2rem] border border-black bg-black p-6 text-white shadow-[0_20px_60px_rgba(0,0,0,0.2)]">
+      <article className="rounded-[2rem] border border-white/20 bg-white/15 p-6 shadow-[0_20px_60px_rgba(0,0,0,0.4)]">
         <p className="text-xs uppercase tracking-[0.3em] text-white/55">Estimated Cost Basis</p>
         <p className="mt-4 text-4xl font-semibold">{formatCurrency(portfolio.estimated_cost_basis)}</p>
       </article>
-      <article className="rounded-[2rem] border border-black bg-white p-6">
-        <p className="text-xs uppercase tracking-[0.3em] text-black/55">Positions</p>
+      <article className="rounded-[2rem] border border-white/15 bg-[#151820] p-6">
+        <p className="text-xs uppercase tracking-[0.3em] text-white/55">Positions</p>
         <p className="mt-4 text-4xl font-semibold">{portfolio.total_positions}</p>
       </article>
-      <article className="rounded-[2rem] border border-black bg-white p-6">
-        <p className="text-xs uppercase tracking-[0.3em] text-black/55">Largest Weight</p>
+      <article className="rounded-[2rem] border border-white/15 bg-[#151820] p-6">
+        <p className="text-xs uppercase tracking-[0.3em] text-white/55">Largest Weight</p>
         {largestAllocation ? (
           <>
             <p className="mt-4 text-2xl font-semibold">{`${largestAllocation.ticker} ${(largestAllocation.weight * 100).toFixed(1)}%`}</p>

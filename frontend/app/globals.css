@@ -3,14 +3,14 @@
 @tailwind utilities;
 
 :root {
-  color-scheme: light;
+  color-scheme: dark;
 }
 
 body {
-  @apply bg-white text-black;
+  @apply bg-[#0d0f14] text-white;
   background-image:
-    radial-gradient(circle at top left, rgba(0, 0, 0, 0.08), transparent 28%),
-    linear-gradient(180deg, #ffffff 0%, #f3f3f3 100%);
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.04), transparent 28%),
+    linear-gradient(180deg, #0d0f14 0%, #111318 100%);
 }
 
 * {
@@ -18,6 +18,6 @@ body {
 }
 
 ::selection {
-  background: #111111;
-  color: #ffffff;
+  background: #ffffff;
+  color: #0d0f14;
 }
