@@ -62,7 +62,7 @@ export function QuarterlyResults({ results }: { results: QuarterlyResultsRespons
           const style = getAssetStyle(item.asset_type);
           const verdict = getQuarterVerdict(item);
           return (
-            <article key={item.ticker} className="rounded-[1.75rem] border border-white/10 bg-[#272a36] p-5 shadow-[0_14px_40px_rgba(0,0,0,0.3)]">
+            <article id={item.ticker} key={item.ticker} className="rounded-[1.75rem] border border-white/10 bg-[#272a36] p-5 shadow-[0_14px_40px_rgba(0,0,0,0.3)]">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <div className="flex items-center gap-3">

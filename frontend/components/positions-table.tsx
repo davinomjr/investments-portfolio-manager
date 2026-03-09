@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { Position } from "@/lib/api";
 import { getAssetStyle } from "@/lib/asset-style";
 
@@ -38,7 +39,14 @@ export function PositionsTable({ positions }: { positions: Position[] }) {
           <tbody>
             {positions.map((position) => (
               <tr key={position.ticker} className="rounded-2xl border border-white/10 bg-[#272a36]">
-                <td className="rounded-l-2xl px-4 py-3 font-semibold">{position.ticker}</td>
+                <td className="rounded-l-2xl px-4 py-3 font-semibold">
+                  <Link
+                    href={`/results#${position.ticker}`}
+                    className="hover:underline hover:text-white/80 transition-colors"
+                  >
+                    {position.ticker}
+                  </Link>
+                </td>
                 <td className="px-4 py-3">
                   <span
                     className="inline-flex rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em]"
