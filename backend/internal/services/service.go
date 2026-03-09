@@ -66,20 +66,26 @@ func normalizeRate(value float64) float64 {
 }
 
 func (s *Service) ImportB3(ctx context.Context) (models.ImportJobResponse, error) {
-	jobID, _, err := s.createJob(ctx, "b3", "running", "Import started")
+	jobID, job, err := s.createJob(ctx, "b3", "running", "Import started")
 	if err != nil {
 		return models.ImportJobResponse{}, err
 	}
-	holdings, err := s.runWorker(ctx, []string{"import", "--json"})
-	if err != nil {
-		updated, _ := s.updateJob(ctx, jobID, "requires_login", err.Error())
-		return updated, nil
-	}
-	if err := s.upsertHoldings(ctx, holdings); err != nil {
-		updated, _ := s.updateJob(ctx, jobID, "failed", err.Error())
-		return updated, nil
-	}
-	return s.updateJob(ctx, jobID, "completed", fmt.Sprintf("Imported %d positions from B3", len(holdings)))
+	// Run the worker in the background so the HTTP request returns immediately.
+	// The caller polls GET /portfolio/import-jobs/latest for the final status.
+	go func() {
+		bgCtx := context.Background()
+		holdings, err := s.runWorker(bgCtx, []string{"import", "--json"})
+		if err != nil {
+			s.updateJob(bgCtx, jobID, "requires_login", err.Error())
+			return
+		}
+		if err := s.upsertHoldings(bgCtx, holdings); err != nil {
+			s.updateJob(bgCtx, jobID, "failed", err.Error())
+			return
+		}
+		s.updateJob(bgCtx, jobID, "completed", fmt.Sprintf("Imported %d positions from B3", len(holdings)))
+	}()
+	return job, nil
 }
 
 func (s *Service) ImportFile(ctx context.Context, file multipart.File, filename string) (models.ImportJobResponse, error) {
@@ -326,6 +332,16 @@ func (s *Service) GetLatestQuarterlyResults(ctx context.Context) (models.Quarter
 	}, nil
 }
 
+func (s *Service) GetLatestImportJob(ctx context.Context) (models.ImportJobResponse, error) {
+	var resp models.ImportJobResponse
+	err := s.DB.QueryRowContext(ctx, `SELECT id, source, status, COALESCE(detail,''), created_at, updated_at FROM import_jobs ORDER BY id DESC LIMIT 1`).
+		Scan(&resp.ID, &resp.Source, &resp.Status, &resp.Detail, &resp.CreatedAt, &resp.UpdatedAt)
+	if err != nil {
+		return models.ImportJobResponse{}, err
+	}
+	return resp, nil
+}
+
 func (s *Service) createJob(ctx context.Context, source, status, detail string) (int64, models.ImportJobResponse, error) {
 	now := time.Now().UTC().Format(time.RFC3339)
 	result, err := s.DB.ExecContext(ctx, `INSERT INTO import_jobs(source,status,detail,created_at,updated_at) VALUES(?,?,?,?,?)`, source, status, detail, now, now)
@@ -351,13 +367,25 @@ func (s *Service) updateJob(ctx context.Context, id int64, status, detail string
 }
 
 func (s *Service) runWorker(ctx context.Context, args []string) ([]models.HoldingPayload, error) {
+	// Use a dedicated timeout so the browser-based worker isn't killed if the
+	// HTTP request context is cancelled (e.g. client disconnect or proxy timeout).
+	workerCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	// Still respect explicit cancellation from the caller (e.g. server shutdown).
+	go func() {
+		select {
+		case <-ctx.Done():
+			cancel()
+		case <-workerCtx.Done():
+		}
+	}()
 	var cmd *exec.Cmd
 	if strings.TrimSpace(s.Config.WorkerCommand) != "" {
 		parts := strings.Fields(s.Config.WorkerCommand)
-		cmd = exec.CommandContext(ctx, parts[0], parts[1:]...)
+		cmd = exec.CommandContext(workerCtx, parts[0], parts[1:]...)
 	} else {
 		all := append([]string{"-m", s.Config.WorkerModule}, args...)
-		cmd = exec.CommandContext(ctx, s.Config.WorkerPython, all...)
+		cmd = exec.CommandContext(workerCtx, s.Config.WorkerPython, all...)
 	}
 	cmd.Dir = s.Config.WorkerDir
 	output, err := cmd.CombinedOutput()

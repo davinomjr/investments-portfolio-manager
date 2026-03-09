@@ -53,9 +53,6 @@ class B3PortfolioExtractor:
     def import_portfolio(self) -> ImportResult:
         from playwright.sync_api import sync_playwright
 
-        if not self.session_file.exists():
-            raise SessionExpiredError("B3 login required to refresh session.")
-
         self.download_dir.mkdir(parents=True, exist_ok=True)
         with sync_playwright() as playwright:
             browser = playwright.chromium.launch(
@@ -64,14 +61,41 @@ class B3PortfolioExtractor:
                     "--disable-blink-features=AutomationControlled",
                 ],
             )
+            storage = str(self.session_file) if self.session_file.exists() else None
             context = browser.new_context(
-                storage_state=str(self.session_file),
+                storage_state=storage,
                 accept_downloads=True,
                 ignore_https_errors=True,
                 locale="pt-BR",
                 timezone_id="America/Sao_Paulo",
             )
             page = context.new_page()
+
+            # Navigate to dashboard; B3 is a React SPA that returns 404 at the
+            # network layer for all routes, so we allow HTTP errors here.
+            self._goto_with_fallback(
+                page,
+                config.portal_url + config.dashboard_path,
+                timeout_ms=config.timeout_ms,
+                allow_http_error=True,
+            )
+            # Wait for the React app to render and any client-side redirect
+            # (e.g. to investidor.b3.com.br/login when session is expired).
+            try:
+                page.wait_for_load_state("networkidle", timeout=15000)
+            except Exception:
+                pass
+            # Extra pause for the SPA auth check to complete
+            page.wait_for_timeout(2000)
+
+            if self._requires_login(page):
+                if config.b3_cpf and config.b3_password:
+                    self._auto_login(page, context)
+                    # Wait for the SPA auth state to fully settle before navigating
+                    page.wait_for_timeout(6000)
+                else:
+                    raise SessionExpiredError("B3 login required to refresh session.")
+
             holdings = self._load_holdings(context, page)
             browser.close()
         return ImportResult(holdings=holdings)
@@ -90,46 +114,136 @@ class B3PortfolioExtractor:
 
     def _load_holdings(self, context: "BrowserContext", page: "Page") -> list[Holding]:
         self._open_positions_page(page)
-        csv_path = self._download_csv_if_available(page)
-        if csv_path is not None:
-            return parse_csv(csv_path)
+        file_path = self._download_file_if_available(page)
+        if file_path is not None:
+            suffix = file_path.suffix.lower()
+            if suffix in {".xlsx", ".xlsm"}:
+                return parse_b3_xlsx(file_path)
+            return parse_csv(file_path)
         return self._scrape_table(page)
+
+    def _auto_login(self, page: "Page", context: "BrowserContext") -> None:
+        """Fill CPF and password on the B3 login page automatically."""
+        from playwright.sync_api import TimeoutError
+
+        try:
+            # Step 1: fill CPF
+            page.wait_for_selector("input:visible", timeout=10000)
+            cpf_input = page.locator("input:visible").first
+            cpf_input.click()
+            cpf_input.press_sequentially(config.b3_cpf, delay=60)
+
+            # Step 2: submit via Enter (focus is on the CPF input)
+            page.wait_for_timeout(1000)
+            page.keyboard.press("Enter")
+        except TimeoutError as exc:
+            raise SessionExpiredError("Auto-login failed — CPF field not found.") from exc
+
+        try:
+            # There may be an intermediate Azure B2C "Continuar" page between
+            # CPF and password — handle it by pressing Enter to advance.
+            page.wait_for_timeout(1500)
+            if not page.locator("input[type='password']:visible").count():
+                page.keyboard.press("Enter")
+
+            # Wait for the password field to appear
+            page.wait_for_selector("input[type='password']:visible", timeout=15000)
+            pwd = page.locator("input[type='password']:visible").first
+            pwd.click()
+            pwd.press_sequentially(config.b3_password, delay=60)
+
+            # Submit via Enter (focus is on the password field)
+            page.wait_for_timeout(1000)
+            page.keyboard.press("Enter")
+        except TimeoutError as exc:
+            raise SessionExpiredError("Auto-login failed — password field not found.") from exc
+
+        try:
+            # Wait until we land on the B3 portal with actual content loaded
+            # (not the blank intermediate OAuth redirect page).
+            page.wait_for_function(
+                "() => window.location.hostname.includes('investidor.b3.com.br') "
+                "&& !window.location.href.includes('/login') "
+                "&& !window.location.hostname.includes('b2clogin') "
+                "&& document.body && document.body.innerText.trim().length > 100",
+                timeout=60000,
+            )
+            # If the "Já baixou o App B3?" popup is present, dismiss it
+            try:
+                page.locator("text=Já baixou o App B3").wait_for(state="visible", timeout=5000)
+                page.keyboard.press("Escape")
+                page.wait_for_timeout(500)
+            except Exception:
+                pass
+            # Ensure we are on www (the SPA host) — navigate if needed
+            if "www.investidor.b3.com.br" not in page.url:
+                self._goto_with_fallback(
+                    page, config.portal_url, timeout_ms=config.timeout_ms, allow_http_error=True
+                )
+                try:
+                    page.wait_for_load_state("networkidle", timeout=10000)
+                except Exception:
+                    pass
+            self.session_file.parent.mkdir(parents=True, exist_ok=True)
+            context.storage_state(path=str(self.session_file))
+        except TimeoutError as exc:
+            raise SessionExpiredError("Auto-login failed — did not redirect to portfolio.") from exc
 
     def _open_positions_page(self, page: "Page") -> None:
         from playwright.sync_api import TimeoutError
 
-        try:
-            self._goto_with_fallback(page, config.portal_url + config.dashboard_path, timeout_ms=config.timeout_ms)
-            if self._requires_login(page):
+        for attempt in range(2):
+            try:
+                self._goto_with_fallback(
+                    page,
+                    config.portal_url + config.positions_path,
+                    timeout_ms=config.timeout_ms,
+                    allow_http_error=True,
+                )
+                try:
+                    page.wait_for_load_state("networkidle", timeout=15000)
+                except Exception:
+                    pass
+                page.wait_for_timeout(2000)
+                if not self._requires_login(page):
+                    return
+                if attempt == 0:
+                    # SPA auth not ready yet — wait and retry once
+                    page.wait_for_timeout(5000)
+                    continue
                 raise SessionExpiredError("B3 login required to refresh session.")
+            except TimeoutError as exc:
+                raise RuntimeError("Timed out while loading the B3 custody page.") from exc
 
-            self._goto_with_fallback(page, config.portal_url + config.positions_path, timeout_ms=config.timeout_ms)
-            if self._requires_login(page):
-                raise SessionExpiredError("B3 login required to refresh session.")
-        except TimeoutError as exc:
-            raise RuntimeError("Timed out while loading the B3 custody page.") from exc
-
-    def _download_csv_if_available(self, page: "Page") -> Path | None:
+    def _download_file_if_available(self, page: "Page") -> Path | None:
         from playwright.sync_api import Error, TimeoutError
 
-        selectors = [
-            "text=Exportar",
-            "text=Export",
-            "button:has-text('CSV')",
-            "[data-testid='export-csv']",
-        ]
-        for selector in selectors:
+        try:
+            # Wait for positions page to fully render before looking for BAIXAR
             try:
-                page.locator(selector).first.wait_for(state="visible", timeout=3000)
-                with page.expect_download(timeout=10000) as download_info:
-                    page.locator(selector).first.click()
-                download = download_info.value
-                path = self.download_dir / "portfolio.csv"
-                download.save_as(str(path))
-                return path
-            except (TimeoutError, Error):
-                continue
-        return None
+                page.wait_for_load_state("networkidle", timeout=15000)
+            except Exception:
+                pass
+            page.wait_for_timeout(2000)
+
+            # Click the BAIXAR button to open the download drawer
+            page.locator("text=BAIXAR").first.wait_for(state="visible", timeout=20000)
+            page.locator("text=BAIXAR").first.click()
+
+            # Select "Arquivo em Excel" in the drawer
+            page.locator("text=Arquivo em Excel").first.wait_for(state="visible", timeout=20000)
+            page.locator("text=Arquivo em Excel").first.click()
+
+            # Trigger the download — the drawer's BAIXAR is the last one
+            page.wait_for_timeout(1000)
+            with page.expect_download(timeout=30000) as download_info:
+                page.locator("text=BAIXAR").last.click(force=True)
+            download = download_info.value
+            path = self.download_dir / ("portfolio" + Path(download.suggested_filename).suffix)
+            download.save_as(str(path))
+            return path
+        except (TimeoutError, Error):
+            return None
 
     def _scrape_table(self, page: "Page") -> list[Holding]:
         row_selectors = [
@@ -171,8 +285,14 @@ class B3PortfolioExtractor:
         return holdings
 
     def _requires_login(self, page: "Page") -> bool:
-        body = page.locator("body").inner_text(timeout=5000).lower()
-        return "login" in body or "cpf" in body or "autentica" in body
+        if "/login" in page.url:
+            return True
+        # Check for the actual CPF login input rather than generic text,
+        # since the word "login" appears in nav menus on authenticated pages too.
+        try:
+            return page.locator("input[placeholder*='CPF' i]").count() > 0
+        except Exception:
+            return False
 
     def _goto_with_fallback(self, page: "Page", url: str, timeout_ms: int, *, allow_http_error: bool = False) -> None:
         from playwright.sync_api import Error
