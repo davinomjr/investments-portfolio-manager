@@ -27,7 +27,7 @@ export default async function ResultsPage() {
             Read the latest quarterly filing summary without loading the full portfolio screen.
           </h1>
           <p className="mt-4 max-w-2xl text-lg text-black/65">
-            This page focuses on official CVM quarterly data and a quick verdict for each imported stock position.
+            This page combines official CVM quarterly data with sourced public-market sentiment for each imported stock position.
           </p>
         </div>
         <div className="rounded-[2rem] border border-black bg-black p-6 text-white shadow-[0_24px_80px_rgba(0,0,0,0.22)]">

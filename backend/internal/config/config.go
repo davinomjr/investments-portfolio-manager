@@ -3,20 +3,27 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 )
 
 type Config struct {
-	Addr          string
-	DatabaseURL   string
-	ProjectRoot   string
-	WorkerDir     string
-	WorkerPython  string
-	WorkerModule  string
-	WorkerCommand string
-	UploadDir     string
-	DataCacheDir  string
-	CVMITRBaseURL string
-	DefaultUserID int64
+	Addr                            string
+	DatabaseURL                     string
+	ProjectRoot                     string
+	WorkerDir                       string
+	WorkerPython                    string
+	WorkerModule                    string
+	WorkerCommand                   string
+	UploadDir                       string
+	DataCacheDir                    string
+	CVMITRBaseURL                   string
+	DefaultUserID                   int64
+	SentimentEnabled                bool
+	SentimentTTLHours               int
+	SentimentNewsLookbackDays       int
+	SentimentTranscriptLookbackDays int
+	SentimentMaxSourcesPerTicker    int
+	SentimentUserAgent              string
 }
 
 func Load() Config {
@@ -24,17 +31,23 @@ func Load() Config {
 	projectRoot := filepath.Dir(cwd)
 	workerPython := env("WORKER_PYTHON", defaultWorkerPython(projectRoot))
 	cfg := Config{
-		Addr:          env("ADDR", "127.0.0.1:8000"),
-		DatabaseURL:   env("DATABASE_URL", filepath.Join(projectRoot, "database", "portfolio.db")),
-		ProjectRoot:   projectRoot,
-		WorkerDir:     env("WORKER_DIR", filepath.Join(projectRoot, "worker")),
-		WorkerPython:  workerPython,
-		WorkerModule:  env("WORKER_MODULE", "app.main"),
-		WorkerCommand: os.Getenv("WORKER_COMMAND"),
-		UploadDir:     env("UPLOAD_DIR", filepath.Join(projectRoot, "backend", "uploads")),
-		DataCacheDir:  env("DATA_CACHE_DIR", filepath.Join(projectRoot, "backend", "data-cache")),
-		CVMITRBaseURL: env("CVM_ITR_BASE_URL", "https://dados.cvm.gov.br/dados/cia_aberta/DOC/ITR/DADOS"),
-		DefaultUserID: 1,
+		Addr:                            env("ADDR", "127.0.0.1:8000"),
+		DatabaseURL:                     env("DATABASE_URL", filepath.Join(projectRoot, "database", "portfolio.db")),
+		ProjectRoot:                     projectRoot,
+		WorkerDir:                       env("WORKER_DIR", filepath.Join(projectRoot, "worker")),
+		WorkerPython:                    workerPython,
+		WorkerModule:                    env("WORKER_MODULE", "app.main"),
+		WorkerCommand:                   os.Getenv("WORKER_COMMAND"),
+		UploadDir:                       env("UPLOAD_DIR", filepath.Join(projectRoot, "backend", "uploads")),
+		DataCacheDir:                    env("DATA_CACHE_DIR", filepath.Join(projectRoot, "backend", "data-cache")),
+		CVMITRBaseURL:                   env("CVM_ITR_BASE_URL", "https://dados.cvm.gov.br/dados/cia_aberta/DOC/ITR/DADOS"),
+		DefaultUserID:                   1,
+		SentimentEnabled:                boolEnv("SENTIMENT_ENABLED", true),
+		SentimentTTLHours:               intEnv("SENTIMENT_TTL_HOURS", 24),
+		SentimentNewsLookbackDays:       intEnv("SENTIMENT_NEWS_LOOKBACK_DAYS", 14),
+		SentimentTranscriptLookbackDays: intEnv("SENTIMENT_TRANSCRIPT_LOOKBACK_DAYS", 45),
+		SentimentMaxSourcesPerTicker:    intEnv("SENTIMENT_MAX_SOURCES_PER_TICKER", 10),
+		SentimentUserAgent:              env("SENTIMENT_USER_AGENT", "Mozilla/5.0 (compatible; PortfolioManagerBot/1.0; +https://localhost)"),
 	}
 	return cfg
 }
@@ -45,6 +58,33 @@ func env(key, fallback string) string {
 		return fallback
 	}
 	return value
+}
+
+func boolEnv(key string, fallback bool) bool {
+	value := os.Getenv(key)
+	if value == "" {
+		return fallback
+	}
+	switch value {
+	case "1", "true", "TRUE", "yes", "YES", "on", "ON":
+		return true
+	case "0", "false", "FALSE", "no", "NO", "off", "OFF":
+		return false
+	default:
+		return fallback
+	}
+}
+
+func intEnv(key string, fallback int) int {
+	value := os.Getenv(key)
+	if value == "" {
+		return fallback
+	}
+	parsed, err := strconv.Atoi(value)
+	if err != nil {
+		return fallback
+	}
+	return parsed
 }
 
 func defaultWorkerPython(projectRoot string) string {

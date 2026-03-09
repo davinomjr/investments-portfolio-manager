@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"portfolio-manager/backend/internal/config"
-	"portfolio-manager/backend/internal/db"
+	"investments-portfolio-manager/backend/internal/config"
+	"investments-portfolio-manager/backend/internal/db"
 )
 
 func seedPosition(t *testing.T, svc *Service) {

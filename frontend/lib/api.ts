@@ -30,9 +30,34 @@ export type QuarterlyResultItem = {
   net_income: number | null;
   ebitda: number | null;
   net_margin: number | null;
+  sentiment: TickerSentiment | null;
   highlights: string[];
   status: string;
   message: string | null;
+};
+
+export type SentimentSource = {
+  source_type: string;
+  provider: string;
+  title: string;
+  url: string;
+  published_at: string | null;
+  excerpt: string | null;
+  score: number | null;
+  weight: number;
+};
+
+export type TickerSentiment = {
+  status: string;
+  label: string | null;
+  score: number | null;
+  confidence: number | null;
+  trend: string | null;
+  source_count: number;
+  last_refreshed_at: string | null;
+  is_stale: boolean;
+  message: string | null;
+  sources: SentimentSource[];
 };
 
 export type QuarterlyResultsResponse = {

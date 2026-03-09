@@ -26,6 +26,18 @@ function formatCurrency(value: number | null) {
   }).format(value);
 }
 
+function formatDateTime(value: string | null) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
 export function QuarterlyResults({ results }: { results: QuarterlyResultsResponse }) {
   return (
     <section className="rounded-[2rem] border border-black bg-white p-6">
@@ -90,6 +102,8 @@ export function QuarterlyResults({ results }: { results: QuarterlyResultsRespons
                     <p className="mt-2 text-sm leading-6 text-black/80">{verdict.summary}</p>
                   </div>
 
+                  <SentimentPanel sentiment={item.sentiment} />
+
                   <div className="mt-4 grid gap-3 sm:grid-cols-2">
                     <Metric label="Revenue" value={formatCurrency(item.revenue)} accent={style.color} />
                     <Metric label="Net Income" value={formatCurrency(item.net_income)} accent={style.color} />
@@ -112,14 +126,100 @@ export function QuarterlyResults({ results }: { results: QuarterlyResultsRespons
                   </ul>
                 </>
               ) : (
-                <div className="mt-5 rounded-[1.25rem] border border-black bg-[#f7f7f7] px-4 py-4">
-                  <p className="text-sm leading-6 text-black/65">{item.message ?? "Quarterly data unavailable for this ticker."}</p>
-                </div>
+                <>
+                  <div className="mt-5 rounded-[1.25rem] border border-black bg-[#f7f7f7] px-4 py-4">
+                    <p className="text-sm leading-6 text-black/65">{item.message ?? "Quarterly data unavailable for this ticker."}</p>
+                  </div>
+                  <SentimentPanel sentiment={item.sentiment} />
+                </>
               )}
             </article>
           );
         })}
       </div>
+    </section>
+  );
+}
+
+function SentimentPanel({ sentiment }: { sentiment: QuarterlyResultsResponse["items"][number]["sentiment"] }) {
+  if (!sentiment) {
+    return null;
+  }
+
+  const tone = getSentimentTone(sentiment);
+  const visibleSources = sentiment.sources.slice(0, 3);
+
+  return (
+    <section className="mt-4 rounded-[1.25rem] border border-black bg-[#faf8f2] p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-xs uppercase tracking-[0.18em] text-black/45">Market sentiment</p>
+          <div className="mt-2 flex items-center gap-2">
+            <span
+              className="inline-flex rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em]"
+              style={{ borderColor: tone.border, backgroundColor: tone.soft, color: tone.text }}
+            >
+              {sentiment.label ?? sentiment.status}
+            </span>
+            {sentiment.is_stale ? <span className="text-xs uppercase tracking-[0.16em] text-black/45">stale</span> : null}
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-right text-sm text-black/60">
+          <div>
+            <p className="text-[11px] uppercase tracking-[0.16em]">Score</p>
+            <p className="mt-1 font-semibold text-black">{sentiment.score !== null ? sentiment.score.toFixed(0) : "N/A"}</p>
+          </div>
+          <div>
+            <p className="text-[11px] uppercase tracking-[0.16em]">Trend</p>
+            <p className="mt-1 font-semibold capitalize text-black">{(sentiment.trend ?? "n/a").replaceAll("_", " ")}</p>
+          </div>
+          <div>
+            <p className="text-[11px] uppercase tracking-[0.16em]">Confidence</p>
+            <p className="mt-1 font-semibold text-black">
+              {sentiment.confidence !== null ? `${Math.round(sentiment.confidence * 100)}%` : "N/A"}
+            </p>
+          </div>
+          <div>
+            <p className="text-[11px] uppercase tracking-[0.16em]">Updated</p>
+            <p className="mt-1 font-semibold text-black">{formatDateTime(sentiment.last_refreshed_at) ?? "-"}</p>
+          </div>
+        </div>
+      </div>
+
+      <p className="mt-3 text-sm leading-6 text-black/70">
+        {sentiment.message ??
+          `${sentiment.source_count} public source${sentiment.source_count === 1 ? "" : "s"} support this market read.`}
+      </p>
+
+      {visibleSources.length > 0 ? (
+        <div className="mt-3 space-y-2">
+          {visibleSources.map((source) => (
+            <a
+              key={`${source.provider}-${source.url}`}
+              href={source.url}
+              target="_blank"
+              rel="noreferrer"
+              className="block rounded-2xl border border-black/10 bg-white px-3 py-3 transition hover:border-black/30"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm font-semibold leading-5 text-black">{source.title}</p>
+                <span className="text-[11px] uppercase tracking-[0.16em] text-black/45">{source.provider}</span>
+              </div>
+              <div className="mt-2 flex flex-wrap items-center gap-3 text-xs uppercase tracking-[0.14em] text-black/45">
+                <span>{source.source_type}</span>
+                {source.published_at ? <span>{formatDateTime(source.published_at)}</span> : null}
+                {source.score !== null ? <span>score {source.score.toFixed(0)}</span> : null}
+              </div>
+              {source.excerpt ? <p className="mt-2 text-sm leading-6 text-black/65">{source.excerpt}</p> : null}
+            </a>
+          ))}
+          {sentiment.sources.length > visibleSources.length ? (
+            <p className="text-xs uppercase tracking-[0.16em] text-black/45">
+              +{sentiment.sources.length - visibleSources.length} more sources
+            </p>
+          ) : null}
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -196,4 +296,17 @@ function getQuarterVerdict(item: QuarterlyResultsResponse["items"][number]) {
     border: "#cbd5e1",
     text: "#334155",
   };
+}
+
+function getSentimentTone(sentiment: NonNullable<QuarterlyResultsResponse["items"][number]["sentiment"]>) {
+  if (sentiment.label === "positive") {
+    return { soft: "#dcfce7", border: "#86efac", text: "#15803d" };
+  }
+  if (sentiment.label === "negative") {
+    return { soft: "#fee2e2", border: "#fca5a5", text: "#b91c1c" };
+  }
+  if (sentiment.label === "mixed") {
+    return { soft: "#fef3c7", border: "#fcd34d", text: "#b45309" };
+  }
+  return { soft: "#e5e7eb", border: "#cbd5e1", text: "#334155" };
 }
