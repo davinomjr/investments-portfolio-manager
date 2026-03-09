@@ -114,16 +114,6 @@ export function QuarterlyResults({ results }: { results: QuarterlyResultsRespons
                     />
                     <NoteCard text="EBITDA is omitted here because it is not a standardized line in CVM quarterly DRE data." />
                   </div>
-                  <ul className="mt-4 flex flex-wrap gap-2">
-                    {item.highlights.map((highlight) => (
-                      <li
-                        key={highlight}
-                        className="rounded-full border border-black px-3 py-1 text-[11px] uppercase tracking-[0.16em] text-black/70"
-                      >
-                        {highlight}
-                      </li>
-                    ))}
-                  </ul>
                 </>
               ) : (
                 <>
