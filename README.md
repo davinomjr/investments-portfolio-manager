@@ -17,6 +17,7 @@ Implemented now:
 - manual file import endpoint: `POST /portfolio/import-file`
 - Portfolio read endpoints: `GET /portfolio`, `GET /positions`
 - latest quarterly stock results endpoint: `GET /stocks/latest-results`
+- Monte Carlo simulation endpoint: `GET /portfolio/monte-carlo`
 - Playwright worker with:
   - storage-state session reuse
   - CSV-first extraction
@@ -26,9 +27,7 @@ Implemented now:
 
 Planned next:
 
-- scenario engine
-- Monte Carlo simulator
-- richer portfolio analysis workflows
+- scenario engine tuning and richer portfolio analysis workflows
 
 ## Run the Go backend
 
