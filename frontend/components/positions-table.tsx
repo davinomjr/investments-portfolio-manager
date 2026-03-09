@@ -18,14 +18,14 @@ function formatDate(value: string) {
 
 export function PositionsTable({ positions }: { positions: Position[] }) {
   return (
-    <section className="rounded-[2rem] border border-black bg-white p-6">
+    <section className="rounded-[2rem] border border-white/15 bg-[#222530] p-6">
       <div className="mb-6">
-        <p className="text-xs uppercase tracking-[0.3em] text-black/55">Positions</p>
+        <p className="text-xs uppercase tracking-[0.3em] text-white/55">Positions</p>
         <h2 className="mt-2 text-2xl font-semibold">Imported holdings</h2>
       </div>
       <div className="overflow-x-auto">
         <table className="min-w-full border-separate border-spacing-y-2 text-left text-sm">
-          <thead className="text-black/50">
+          <thead className="text-white/50">
             <tr>
               <th className="pb-2 pr-4">Ticker</th>
               <th className="pb-2 pr-4">Type</th>
@@ -37,7 +37,7 @@ export function PositionsTable({ positions }: { positions: Position[] }) {
           </thead>
           <tbody>
             {positions.map((position) => (
-              <tr key={position.ticker} className="rounded-2xl border border-black bg-[#f6f6f6]">
+              <tr key={position.ticker} className="rounded-2xl border border-white/10 bg-[#272a36]">
                 <td className="rounded-l-2xl px-4 py-3 font-semibold">{position.ticker}</td>
                 <td className="px-4 py-3">
                   <span
