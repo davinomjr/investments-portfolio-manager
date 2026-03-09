@@ -40,19 +40,19 @@ function formatDateTime(value: string | null) {
 
 export function QuarterlyResults({ results }: { results: QuarterlyResultsResponse }) {
   return (
-    <section className="rounded-[2rem] border border-black bg-white p-6">
+    <section className="rounded-[2rem] border border-white/15 bg-[#151820] p-6">
       <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
         <div>
-          <p className="text-xs uppercase tracking-[0.3em] text-black/55">Latest Quarter</p>
+          <p className="text-xs uppercase tracking-[0.3em] text-white/55">Latest Quarter</p>
           <h2 className="mt-2 text-2xl font-semibold">Results summary for held stocks</h2>
         </div>
-        <p className="max-w-xl text-sm leading-6 text-black/60">
+        <p className="max-w-xl text-sm leading-6 text-white/60">
           Official CVM filing snapshot for imported equity positions, condensed into a faster read than raw statements.
         </p>
       </div>
 
       {results.message ? (
-        <div className="mt-6 rounded-[1.5rem] border border-black bg-[#f5f5f5] px-4 py-3 text-sm text-black/70">
+        <div className="mt-6 rounded-[1.5rem] border border-white/10 bg-[#1e2028] px-4 py-3 text-sm text-white/70">
           {results.message}
         </div>
       ) : null}
@@ -62,7 +62,7 @@ export function QuarterlyResults({ results }: { results: QuarterlyResultsRespons
           const style = getAssetStyle(item.asset_type);
           const verdict = getQuarterVerdict(item);
           return (
-            <article key={item.ticker} className="rounded-[1.75rem] border border-black bg-white p-5 shadow-[0_14px_40px_rgba(0,0,0,0.05)]">
+            <article key={item.ticker} className="rounded-[1.75rem] border border-white/10 bg-[#1a1c24] p-5 shadow-[0_14px_40px_rgba(0,0,0,0.3)]">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <div className="flex items-center gap-3">
@@ -78,11 +78,11 @@ export function QuarterlyResults({ results }: { results: QuarterlyResultsRespons
                       {style.label}
                     </span>
                   </div>
-                  <p className="mt-2 text-sm text-black/60">{item.company_name ?? "Company name unavailable"}</p>
+                  <p className="mt-2 text-sm text-white/60">{item.company_name ?? "Company name unavailable"}</p>
                 </div>
-                <div className="text-right text-sm text-black/55">
+                <div className="text-right text-sm text-white/55">
                   <p className="uppercase tracking-[0.18em]">Status</p>
-                  <p className="font-semibold text-black">{item.status.replaceAll("_", " ")}</p>
+                  <p className="font-semibold text-white">{item.status.replaceAll("_", " ")}</p>
                   {item.report_date ? <p className="mt-1">{item.report_date}</p> : null}
                 </div>
               </div>
@@ -99,7 +99,7 @@ export function QuarterlyResults({ results }: { results: QuarterlyResultsRespons
                     <p className="text-xs font-semibold uppercase tracking-[0.18em]" style={{ color: verdict.text }}>
                       {verdict.label}
                     </p>
-                    <p className="mt-2 text-sm leading-6 text-black/80">{verdict.summary}</p>
+                    <p className="mt-2 text-sm leading-6 text-white/80">{verdict.summary}</p>
                   </div>
 
                   <SentimentPanel sentiment={item.sentiment} />
@@ -117,8 +117,8 @@ export function QuarterlyResults({ results }: { results: QuarterlyResultsRespons
                 </>
               ) : (
                 <>
-                  <div className="mt-5 rounded-[1.25rem] border border-black bg-[#f7f7f7] px-4 py-4">
-                    <p className="text-sm leading-6 text-black/65">{item.message ?? "Quarterly data unavailable for this ticker."}</p>
+                  <div className="mt-5 rounded-[1.25rem] border border-white/10 bg-[#1e2028] px-4 py-4">
+                    <p className="text-sm leading-6 text-white/65">{item.message ?? "Quarterly data unavailable for this ticker."}</p>
                   </div>
                   <SentimentPanel sentiment={item.sentiment} />
                 </>
@@ -140,10 +140,10 @@ function SentimentPanel({ sentiment }: { sentiment: QuarterlyResultsResponse["it
   const visibleSources = sentiment.sources.slice(0, 3);
 
   return (
-    <section className="mt-4 rounded-[1.25rem] border border-black bg-[#faf8f2] p-4">
+    <section className="mt-4 rounded-[1.25rem] border border-white/10 bg-[#1e2028] p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-xs uppercase tracking-[0.18em] text-black/45">Market sentiment</p>
+          <p className="text-xs uppercase tracking-[0.18em] text-white/45">Market sentiment</p>
           <div className="mt-2 flex items-center gap-2">
             <span
               className="inline-flex rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em]"
@@ -151,32 +151,32 @@ function SentimentPanel({ sentiment }: { sentiment: QuarterlyResultsResponse["it
             >
               {sentiment.label ?? sentiment.status}
             </span>
-            {sentiment.is_stale ? <span className="text-xs uppercase tracking-[0.16em] text-black/45">stale</span> : null}
+            {sentiment.is_stale ? <span className="text-xs uppercase tracking-[0.16em] text-white/45">stale</span> : null}
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-right text-sm text-black/60">
+        <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-right text-sm text-white/60">
           <div>
             <p className="text-[11px] uppercase tracking-[0.16em]">Score</p>
-            <p className="mt-1 font-semibold text-black">{sentiment.score !== null ? sentiment.score.toFixed(0) : "N/A"}</p>
+            <p className="mt-1 font-semibold text-white">{sentiment.score !== null ? sentiment.score.toFixed(0) : "N/A"}</p>
           </div>
           <div>
             <p className="text-[11px] uppercase tracking-[0.16em]">Trend</p>
-            <p className="mt-1 font-semibold capitalize text-black">{(sentiment.trend ?? "n/a").replaceAll("_", " ")}</p>
+            <p className="mt-1 font-semibold capitalize text-white">{(sentiment.trend ?? "n/a").replaceAll("_", " ")}</p>
           </div>
           <div>
             <p className="text-[11px] uppercase tracking-[0.16em]">Confidence</p>
-            <p className="mt-1 font-semibold text-black">
+            <p className="mt-1 font-semibold text-white">
               {sentiment.confidence !== null ? `${Math.round(sentiment.confidence * 100)}%` : "N/A"}
             </p>
           </div>
           <div>
             <p className="text-[11px] uppercase tracking-[0.16em]">Updated</p>
-            <p className="mt-1 font-semibold text-black">{formatDateTime(sentiment.last_refreshed_at) ?? "-"}</p>
+            <p className="mt-1 font-semibold text-white">{formatDateTime(sentiment.last_refreshed_at) ?? "-"}</p>
           </div>
         </div>
       </div>
 
-      <p className="mt-3 text-sm leading-6 text-black/70">
+      <p className="mt-3 text-sm leading-6 text-white/70">
         {sentiment.message ??
           `${sentiment.source_count} public source${sentiment.source_count === 1 ? "" : "s"} support this market read.`}
       </p>
@@ -189,22 +189,22 @@ function SentimentPanel({ sentiment }: { sentiment: QuarterlyResultsResponse["it
               href={source.url}
               target="_blank"
               rel="noreferrer"
-              className="block rounded-2xl border border-black/10 bg-white px-3 py-3 transition hover:border-black/30"
+              className="block rounded-2xl border border-white/10 bg-[#151820] px-3 py-3 transition hover:border-white/25"
             >
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-sm font-semibold leading-5 text-black">{source.title}</p>
-                <span className="text-[11px] uppercase tracking-[0.16em] text-black/45">{source.provider}</span>
+                <p className="text-sm font-semibold leading-5 text-white">{source.title}</p>
+                <span className="text-[11px] uppercase tracking-[0.16em] text-white/45">{source.provider}</span>
               </div>
-              <div className="mt-2 flex flex-wrap items-center gap-3 text-xs uppercase tracking-[0.14em] text-black/45">
+              <div className="mt-2 flex flex-wrap items-center gap-3 text-xs uppercase tracking-[0.14em] text-white/45">
                 <span>{source.source_type}</span>
                 {source.published_at ? <span>{formatDateTime(source.published_at)}</span> : null}
                 {source.score !== null ? <span>score {source.score.toFixed(0)}</span> : null}
               </div>
-              {source.excerpt ? <p className="mt-2 text-sm leading-6 text-black/65">{source.excerpt}</p> : null}
+              {source.excerpt ? <p className="mt-2 text-sm leading-6 text-white/65">{source.excerpt}</p> : null}
             </a>
           ))}
           {sentiment.sources.length > visibleSources.length ? (
-            <p className="text-xs uppercase tracking-[0.16em] text-black/45">
+            <p className="text-xs uppercase tracking-[0.16em] text-white/45">
               +{sentiment.sources.length - visibleSources.length} more sources
             </p>
           ) : null}
@@ -216,8 +216,8 @@ function SentimentPanel({ sentiment }: { sentiment: QuarterlyResultsResponse["it
 
 function Metric({ label, value, accent }: { label: string; value: string | null; accent: string }) {
   return (
-    <div className="rounded-[1.25rem] border border-black bg-[#fafafa] p-4">
-      <p className="text-xs uppercase tracking-[0.18em] text-black/50">{label}</p>
+    <div className="rounded-[1.25rem] border border-white/10 bg-[#1e2028] p-4">
+      <p className="text-xs uppercase tracking-[0.18em] text-white/50">{label}</p>
       <p
         className="mt-2 whitespace-nowrap text-[clamp(1rem,1.8vw,2.2rem)] font-semibold leading-tight"
         style={{ color: accent }}
@@ -231,9 +231,9 @@ function Metric({ label, value, accent }: { label: string; value: string | null;
 
 function NoteCard({ text }: { text: string }) {
   return (
-    <div className="rounded-[1.25rem] border border-black bg-[#f3f3f3] p-4">
-      <p className="text-xs uppercase tracking-[0.18em] text-black/50">Note</p>
-      <p className="mt-2 text-sm leading-6 text-black/70">{text}</p>
+    <div className="rounded-[1.25rem] border border-white/10 bg-[#1e2028] p-4">
+      <p className="text-xs uppercase tracking-[0.18em] text-white/50">Note</p>
+      <p className="mt-2 text-sm leading-6 text-white/70">{text}</p>
     </div>
   );
 }

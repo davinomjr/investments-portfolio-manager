@@ -13,15 +13,15 @@ export function TopNav() {
   const pathname = usePathname();
 
   return (
-    <header className="sticky top-0 z-20 border-b border-black bg-white/90 backdrop-blur">
+    <header className="sticky top-0 z-20 border-b border-white/15 bg-[#0d0f14]/90 backdrop-blur">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4 md:px-10">
         <div>
-          <p className="text-[11px] uppercase tracking-[0.35em] text-black/45">Portfolio Manager</p>
-          <p className="mt-1 text-sm text-black/65">
+          <p className="text-[11px] uppercase tracking-[0.35em] text-white/45">Portfolio Manager</p>
+          <p className="mt-1 text-sm text-white/65">
             B3 import, holdings review, quarterly checks, and Monte Carlo simulation.
           </p>
         </div>
-        <nav className="flex items-center gap-2 rounded-full border border-black p-1">
+        <nav className="flex items-center gap-2 rounded-full border border-white/15 p-1">
           {ITEMS.map((item) => {
             const active = pathname === item.href;
             return (
@@ -30,8 +30,8 @@ export function TopNav() {
                 href={item.href}
                 className={
                   active
-                    ? "rounded-full bg-black px-4 py-2 text-sm font-semibold text-white"
-                    : "rounded-full px-4 py-2 text-sm font-semibold text-black/65 transition hover:bg-black hover:text-white"
+                    ? "rounded-full bg-white px-4 py-2 text-sm font-semibold text-[#0d0f14]"
+                    : "rounded-full px-4 py-2 text-sm font-semibold text-white/65 transition hover:bg-white/10 hover:text-white"
                 }
               >
                 {item.label}
