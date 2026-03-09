@@ -3,8 +3,10 @@ import { PositionsTable } from "@/components/positions-table";
 import { SummaryCards } from "@/components/summary-cards";
 import { UploadPanel } from "@/components/upload-panel";
 import {
+  fetchLatestImportJob,
   fetchPortfolio,
   fetchPositions,
+  type ImportJobResponse,
   type Portfolio,
   type Position,
 } from "@/lib/api";
@@ -18,10 +20,15 @@ const EMPTY_PORTFOLIO: Portfolio = {
 export default async function HomePage() {
   let portfolio: Portfolio = EMPTY_PORTFOLIO;
   let positions: Position[] = [];
+  let latestJob: ImportJobResponse | null = null;
   let loadError: string | null = null;
 
   try {
-    [portfolio, positions] = await Promise.all([fetchPortfolio(), fetchPositions()]);
+    [portfolio, positions, latestJob] = await Promise.all([
+      fetchPortfolio(),
+      fetchPositions(),
+      fetchLatestImportJob(),
+    ]);
   } catch (error) {
     loadError = error instanceof Error ? error.message : "Failed to load portfolio data.";
   }
@@ -47,7 +54,7 @@ export default async function HomePage() {
         </div>
       </section>
 
-      <UploadPanel />
+      <UploadPanel latestJob={latestJob} />
       {loadError ? (
         <section className="rounded-[2rem] border border-white/15 bg-white/10 p-5 text-sm text-white">
           {loadError} Start the Go backend and refresh this page.
