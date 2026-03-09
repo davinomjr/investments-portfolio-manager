@@ -53,6 +53,31 @@ type QuarterlyResultsResponse struct {
 	Items      []QuarterlyResultItem `json:"items"`
 }
 
+type MonteCarloParams struct {
+	Years          int     `json:"years"`
+	Simulations    int     `json:"simulations"`
+	ExpectedReturn float64 `json:"expected_return"`
+	Volatility     float64 `json:"volatility"`
+}
+
+type MonteCarloYearPoint struct {
+	Year         int     `json:"year"`
+	P10          float64 `json:"p10"`
+	P50          float64 `json:"p50"`
+	P90          float64 `json:"p90"`
+	Average      float64 `json:"average"`
+	BestCase     float64 `json:"best_case"`
+	WorstCase    float64 `json:"worst_case"`
+	ProbPositive float64 `json:"prob_positive"`
+}
+
+type MonteCarloResponse struct {
+	InitialValue float64               `json:"initial_value"`
+	Params       MonteCarloParams      `json:"params"`
+	Timeline     []MonteCarloYearPoint `json:"timeline"`
+	Message      string                `json:"message"`
+}
+
 type HoldingPayload struct {
 	Ticker       string  `json:"ticker"`
 	Quantity     float64 `json:"quantity"`

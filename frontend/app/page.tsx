@@ -35,15 +35,14 @@ export default async function HomePage() {
             Visualize imported B3 positions before you start building scenarios.
           </h1>
           <p className="mt-4 max-w-2xl text-lg text-black/65">
-            Upload a manual B3 export, inspect the normalized holdings, and review allocation weight before Monte Carlo
-            simulation is added.
+            Upload a manual B3 export, inspect normalized holdings, and review allocation weight before running your
+            Monte Carlo scenarios.
           </p>
         </div>
         <div className="rounded-[2rem] border border-black bg-black p-6 text-white shadow-[0_24px_80px_rgba(0,0,0,0.22)]">
           <p className="text-xs uppercase tracking-[0.3em] text-white/55">Current Scope</p>
           <p className="mt-3 text-lg">
-            Manual import, normalized positions, and allocation visualization are live. Scenario simulation is the next
-            layer.
+            Manual import, normalized positions, allocation visualization, and Monte Carlo simulation are live.
           </p>
         </div>
       </section>
@@ -51,7 +50,7 @@ export default async function HomePage() {
       <UploadPanel />
       {loadError ? (
         <section className="rounded-[2rem] border border-black bg-[#f1f1f1] p-5 text-sm text-black">
-          {loadError} Start the FastAPI backend and refresh this page.
+          {loadError} Start the Go backend and refresh this page.
         </section>
       ) : null}
       <SummaryCards portfolio={portfolio} />

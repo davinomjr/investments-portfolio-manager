@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"math/rand"
 	"mime/multipart"
 	"net/http"
 	"os"
@@ -38,6 +39,30 @@ func New(db *sql.DB, cfg config.Config) *Service {
 		Config: cfg,
 		Client: &http.Client{Timeout: 60 * time.Second},
 	}
+}
+
+func ParseMonteCarloParams(yearsRaw, simulationsRaw, expectedReturnRaw, volatilityRaw string) models.MonteCarloParams {
+	params := models.MonteCarloParams{}
+	if years, err := strconv.Atoi(strings.TrimSpace(yearsRaw)); err == nil {
+		params.Years = years
+	}
+	if simulations, err := strconv.Atoi(strings.TrimSpace(simulationsRaw)); err == nil {
+		params.Simulations = simulations
+	}
+	if expectedReturn, err := strconv.ParseFloat(strings.TrimSpace(expectedReturnRaw), 64); err == nil {
+		params.ExpectedReturn = normalizeRate(expectedReturn)
+	}
+	if volatility, err := strconv.ParseFloat(strings.TrimSpace(volatilityRaw), 64); err == nil {
+		params.Volatility = math.Abs(normalizeRate(volatility))
+	}
+	return params
+}
+
+func normalizeRate(value float64) float64 {
+	if math.Abs(value) > 1 {
+		return value / 100
+	}
+	return value
 }
 
 func (s *Service) ImportB3(ctx context.Context) (models.ImportJobResponse, error) {
@@ -149,6 +174,103 @@ func (s *Service) GetPortfolio(ctx context.Context) (models.PortfolioResponse, e
 	sort.Slice(allocations, func(i, j int) bool { return allocations[i].MarketValue > allocations[j].MarketValue })
 	return models.PortfolioResponse{
 		TotalPositions: count, EstimatedCostBasis: total, Allocations: allocations,
+	}, nil
+}
+
+func (s *Service) GetMonteCarloSimulation(ctx context.Context, params models.MonteCarloParams) (models.MonteCarloResponse, error) {
+	portfolio, err := s.GetPortfolio(ctx)
+	if err != nil {
+		return models.MonteCarloResponse{}, err
+	}
+	initial := portfolio.EstimatedCostBasis
+	if params.Years <= 0 {
+		params.Years = 10
+	}
+	if params.Simulations <= 0 {
+		params.Simulations = 1000
+	}
+	if params.ExpectedReturn == 0 {
+		params.ExpectedReturn = 0.10
+	}
+	if params.Volatility == 0 {
+		params.Volatility = 0.18
+	}
+	if params.Years > 40 {
+		params.Years = 40
+	}
+	if params.Simulations > 20000 {
+		params.Simulations = 20000
+	}
+	if params.Volatility < 0 {
+		params.Volatility = math.Abs(params.Volatility)
+	}
+	if params.Volatility > 3 {
+		params.Volatility = 3
+	}
+	if params.ExpectedReturn < -0.99 {
+		params.ExpectedReturn = -0.99
+	}
+	if params.ExpectedReturn > 3 {
+		params.ExpectedReturn = 3
+	}
+	if initial <= 0 {
+		return models.MonteCarloResponse{
+			InitialValue: 0,
+			Params:       params,
+			Timeline:     []models.MonteCarloYearPoint{},
+			Message:      "Import positions first so the simulator has an initial portfolio value.",
+		}, nil
+	}
+
+	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
+	paths := make([][]float64, params.Years)
+	for year := 0; year < params.Years; year++ {
+		paths[year] = make([]float64, params.Simulations)
+	}
+
+	drift := params.ExpectedReturn - 0.5*params.Volatility*params.Volatility
+	for i := 0; i < params.Simulations; i++ {
+		value := initial
+		for year := 0; year < params.Years; year++ {
+			z := rng.NormFloat64()
+			shock := math.Exp(drift + params.Volatility*z)
+			value *= shock
+			paths[year][i] = value
+		}
+	}
+
+	timeline := make([]models.MonteCarloYearPoint, 0, params.Years)
+	for year := 0; year < params.Years; year++ {
+		values := append([]float64(nil), paths[year]...)
+		sort.Float64s(values)
+		sum := 0.0
+		positive := 0
+		for _, v := range values {
+			sum += v
+			if v >= initial {
+				positive++
+			}
+		}
+		idx10 := int(math.Floor(float64(len(values)-1) * 0.10))
+		idx50 := int(math.Floor(float64(len(values)-1) * 0.50))
+		idx90 := int(math.Floor(float64(len(values)-1) * 0.90))
+		timeline = append(timeline, models.MonteCarloYearPoint{
+			Year:         year + 1,
+			P10:          values[idx10],
+			P50:          values[idx50],
+			P90:          values[idx90],
+			Average:      sum / float64(len(values)),
+			BestCase:     values[len(values)-1],
+			WorstCase:    values[0],
+			ProbPositive: float64(positive) / float64(len(values)),
+		})
+	}
+
+	return models.MonteCarloResponse{
+		InitialValue: initial,
+		Params:       params,
+		Timeline:     timeline,
+		Message:      "Annualized geometric Brownian motion simulation using current cost basis as the starting value.",
 	}, nil
 }
 
