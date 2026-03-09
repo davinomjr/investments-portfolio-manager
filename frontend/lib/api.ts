@@ -92,6 +92,15 @@ export type MonteCarloResponse = {
   message: string;
 };
 
+export type ImportJobResponse = {
+  id: number;
+  source: string;
+  status: string;
+  detail?: string;
+  created_at: string;
+  updated_at: string;
+};
+
 const API_BASE = process.env.INTERNAL_API_BASE_URL ?? "http://127.0.0.1:8000";
 
 export async function fetchPortfolio(): Promise<Portfolio> {
@@ -115,6 +124,13 @@ export async function fetchQuarterlyResults(): Promise<QuarterlyResultsResponse>
   if (!response.ok) {
     throw new Error("Failed to load latest quarter results.");
   }
+  return response.json();
+}
+
+export async function fetchLatestImportJob(): Promise<ImportJobResponse | null> {
+  const response = await fetch(`${API_BASE}/portfolio/import-jobs/latest`, { cache: "no-store" });
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error("Failed to load latest import job.");
   return response.json();
 }
 

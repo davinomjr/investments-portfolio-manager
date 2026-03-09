@@ -1,7 +1,9 @@
 package httpapi
 
 import (
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 
@@ -19,6 +21,7 @@ func New(svc *services.Service) http.Handler {
 	mux.HandleFunc("GET /positions", server.handlePositions)
 	mux.HandleFunc("GET /stocks/latest-results", server.handleLatestResults)
 	mux.HandleFunc("GET /portfolio/monte-carlo", server.handleMonteCarlo)
+	mux.HandleFunc("GET /portfolio/import-jobs/latest", server.handleGetLatestImportJob)
 	mux.HandleFunc("POST /portfolio/import-b3", server.handleImportB3)
 	mux.HandleFunc("POST /portfolio/import-file", server.handleImportFile)
 	return withCORS(mux)
@@ -49,6 +52,19 @@ func (s *Server) handleMonteCarlo(w http.ResponseWriter, r *http.Request) {
 	)
 	resp, err := s.Service.GetMonteCarloSimulation(r.Context(), params)
 	writeJSON(w, resp, err, http.StatusOK)
+}
+
+func (s *Server) handleGetLatestImportJob(w http.ResponseWriter, r *http.Request) {
+	resp, err := s.Service.GetLatestImportJob(r.Context())
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			writeErr(w, "no import jobs found", http.StatusNotFound)
+			return
+		}
+		writeErr(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, resp, nil, http.StatusOK)
 }
 
 func (s *Server) handleImportB3(w http.ResponseWriter, r *http.Request) {
