@@ -20,6 +20,7 @@ func New(svc *services.Service) http.Handler {
 	mux.HandleFunc("GET /portfolio", server.handlePortfolio)
 	mux.HandleFunc("GET /positions", server.handlePositions)
 	mux.HandleFunc("GET /stocks/latest-results", server.handleLatestResults)
+	mux.HandleFunc("GET /stocks/{ticker}/sentiment", server.handleTickerSentiment)
 	mux.HandleFunc("GET /portfolio/monte-carlo", server.handleMonteCarlo)
 	mux.HandleFunc("GET /portfolio/import-jobs/latest", server.handleGetLatestImportJob)
 	mux.HandleFunc("POST /portfolio/import-b3", server.handleImportB3)
@@ -40,6 +41,20 @@ func (s *Server) handlePositions(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleLatestResults(w http.ResponseWriter, r *http.Request) {
 	resp, err := s.Service.GetLatestQuarterlyResults(r.Context())
 	writeJSON(w, resp, err, http.StatusOK)
+}
+
+func (s *Server) handleTickerSentiment(w http.ResponseWriter, r *http.Request) {
+	ticker := r.PathValue("ticker")
+	sentiment, err := s.Service.GetTickerSentiment(r.Context(), ticker)
+	if err != nil {
+		writeErr(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if sentiment == nil {
+		writeErr(w, "ticker not found", http.StatusNotFound)
+		return
+	}
+	writeJSON(w, sentiment, nil, http.StatusOK)
 }
 
 func (s *Server) handleMonteCarlo(w http.ResponseWriter, r *http.Request) {
