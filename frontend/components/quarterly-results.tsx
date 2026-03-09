@@ -40,7 +40,7 @@ function formatDateTime(value: string | null) {
 
 export function QuarterlyResults({ results }: { results: QuarterlyResultsResponse }) {
   return (
-    <section className="rounded-[2rem] border border-white/15 bg-[#151820] p-6">
+    <section className="rounded-[2rem] border border-white/15 bg-[#222530] p-6">
       <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
         <div>
           <p className="text-xs uppercase tracking-[0.3em] text-white/55">Latest Quarter</p>
@@ -52,7 +52,7 @@ export function QuarterlyResults({ results }: { results: QuarterlyResultsRespons
       </div>
 
       {results.message ? (
-        <div className="mt-6 rounded-[1.5rem] border border-white/10 bg-[#1e2028] px-4 py-3 text-sm text-white/70">
+        <div className="mt-6 rounded-[1.5rem] border border-white/10 bg-[#272a36] px-4 py-3 text-sm text-white/70">
           {results.message}
         </div>
       ) : null}
@@ -62,7 +62,7 @@ export function QuarterlyResults({ results }: { results: QuarterlyResultsRespons
           const style = getAssetStyle(item.asset_type);
           const verdict = getQuarterVerdict(item);
           return (
-            <article key={item.ticker} className="rounded-[1.75rem] border border-white/10 bg-[#1a1c24] p-5 shadow-[0_14px_40px_rgba(0,0,0,0.3)]">
+            <article key={item.ticker} className="rounded-[1.75rem] border border-white/10 bg-[#272a36] p-5 shadow-[0_14px_40px_rgba(0,0,0,0.3)]">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <div className="flex items-center gap-3">
@@ -99,7 +99,7 @@ export function QuarterlyResults({ results }: { results: QuarterlyResultsRespons
                     <p className="text-xs font-semibold uppercase tracking-[0.18em]" style={{ color: verdict.text }}>
                       {verdict.label}
                     </p>
-                    <p className="mt-2 text-sm leading-6 text-white/80">{verdict.summary}</p>
+                    <p className="mt-2 text-sm leading-6 text-black/75">{verdict.summary}</p>
                   </div>
 
                   <SentimentPanel sentiment={item.sentiment} />
@@ -117,7 +117,7 @@ export function QuarterlyResults({ results }: { results: QuarterlyResultsRespons
                 </>
               ) : (
                 <>
-                  <div className="mt-5 rounded-[1.25rem] border border-white/10 bg-[#1e2028] px-4 py-4">
+                  <div className="mt-5 rounded-[1.25rem] border border-white/10 bg-[#272a36] px-4 py-4">
                     <p className="text-sm leading-6 text-white/65">{item.message ?? "Quarterly data unavailable for this ticker."}</p>
                   </div>
                   <SentimentPanel sentiment={item.sentiment} />
@@ -140,7 +140,7 @@ function SentimentPanel({ sentiment }: { sentiment: QuarterlyResultsResponse["it
   const visibleSources = sentiment.sources.slice(0, 3);
 
   return (
-    <section className="mt-4 rounded-[1.25rem] border border-white/10 bg-[#1e2028] p-4">
+    <section className="mt-4 rounded-[1.25rem] border border-white/10 bg-[#272a36] p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-xs uppercase tracking-[0.18em] text-white/45">Market sentiment</p>
@@ -189,7 +189,7 @@ function SentimentPanel({ sentiment }: { sentiment: QuarterlyResultsResponse["it
               href={source.url}
               target="_blank"
               rel="noreferrer"
-              className="block rounded-2xl border border-white/10 bg-[#151820] px-3 py-3 transition hover:border-white/25"
+              className="block rounded-2xl border border-white/10 bg-[#222530] px-3 py-3 transition hover:border-white/25"
             >
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-sm font-semibold leading-5 text-white">{source.title}</p>
@@ -216,7 +216,7 @@ function SentimentPanel({ sentiment }: { sentiment: QuarterlyResultsResponse["it
 
 function Metric({ label, value, accent }: { label: string; value: string | null; accent: string }) {
   return (
-    <div className="rounded-[1.25rem] border border-white/10 bg-[#1e2028] p-4">
+    <div className="rounded-[1.25rem] border border-white/10 bg-[#272a36] p-4">
       <p className="text-xs uppercase tracking-[0.18em] text-white/50">{label}</p>
       <p
         className="mt-2 whitespace-nowrap text-[clamp(1rem,1.8vw,2.2rem)] font-semibold leading-tight"
@@ -231,7 +231,7 @@ function Metric({ label, value, accent }: { label: string; value: string | null;
 
 function NoteCard({ text }: { text: string }) {
   return (
-    <div className="rounded-[1.25rem] border border-white/10 bg-[#1e2028] p-4">
+    <div className="rounded-[1.25rem] border border-white/10 bg-[#272a36] p-4">
       <p className="text-xs uppercase tracking-[0.18em] text-white/50">Note</p>
       <p className="mt-2 text-sm leading-6 text-white/70">{text}</p>
     </div>

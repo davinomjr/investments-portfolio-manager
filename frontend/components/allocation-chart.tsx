@@ -13,7 +13,7 @@ export function AllocationChart({ allocations }: { allocations: Allocation[] }) 
   }));
 
   return (
-    <section className="rounded-[2rem] border border-white/15 bg-[#151820] p-6">
+    <section className="rounded-[2rem] border border-white/15 bg-[#222530] p-6">
       <div className="mb-6">
         <p className="text-xs uppercase tracking-[0.3em] text-white/55">Allocation</p>
         <h2 className="mt-2 text-2xl font-semibold">Top portfolio weights</h2>
@@ -34,7 +34,7 @@ export function AllocationChart({ allocations }: { allocations: Allocation[] }) 
               ))}
             </Pie>
             <Tooltip
-              contentStyle={{ borderRadius: "16px", border: "1px solid rgba(255,255,255,0.15)", backgroundColor: "#1e2028", color: "#fff" }}
+              contentStyle={{ borderRadius: "16px", border: "1px solid rgba(255,255,255,0.15)", backgroundColor: "#272a36", color: "#fff" }}
               formatter={(value: number, _name, item) => {
                 const payload = item.payload as { assetType: string };
                 return [`${value.toFixed(2)}%`, getAssetStyle(payload.assetType).label];

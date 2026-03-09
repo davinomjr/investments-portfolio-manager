@@ -13,7 +13,7 @@ export function TopNav() {
   const pathname = usePathname();
 
   return (
-    <header className="sticky top-0 z-20 border-b border-white/15 bg-[#0d0f14]/90 backdrop-blur">
+    <header className="sticky top-0 z-20 border-b border-white/15 bg-[#1a1d25]/90 backdrop-blur">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4 md:px-10">
         <div>
           <p className="text-[11px] uppercase tracking-[0.35em] text-white/45">Portfolio Manager</p>
@@ -30,7 +30,7 @@ export function TopNav() {
                 href={item.href}
                 className={
                   active
-                    ? "rounded-full bg-white px-4 py-2 text-sm font-semibold text-[#0d0f14]"
+                    ? "rounded-full bg-white px-4 py-2 text-sm font-semibold text-[#1a1d25]"
                     : "rounded-full px-4 py-2 text-sm font-semibold text-white/65 transition hover:bg-white/10 hover:text-white"
                 }
               >
