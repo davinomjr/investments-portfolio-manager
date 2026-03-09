@@ -33,17 +33,18 @@ type PortfolioResponse struct {
 }
 
 type QuarterlyResultItem struct {
-	Ticker      string   `json:"ticker"`
-	CompanyName string   `json:"company_name,omitempty"`
-	AssetType   string   `json:"asset_type"`
-	ReportDate  string   `json:"report_date,omitempty"`
-	Revenue     *float64 `json:"revenue"`
-	NetIncome   *float64 `json:"net_income"`
-	EBITDA      *float64 `json:"ebitda"`
-	NetMargin   *float64 `json:"net_margin"`
-	Highlights  []string `json:"highlights"`
-	Status      string   `json:"status"`
-	Message     string   `json:"message,omitempty"`
+	Ticker      string           `json:"ticker"`
+	CompanyName string           `json:"company_name,omitempty"`
+	AssetType   string           `json:"asset_type"`
+	ReportDate  string           `json:"report_date,omitempty"`
+	Revenue     *float64         `json:"revenue"`
+	NetIncome   *float64         `json:"net_income"`
+	EBITDA      *float64         `json:"ebitda"`
+	NetMargin   *float64         `json:"net_margin"`
+	Sentiment   *TickerSentiment `json:"sentiment"`
+	Highlights  []string         `json:"highlights"`
+	Status      string           `json:"status"`
+	Message     string           `json:"message,omitempty"`
 }
 
 type QuarterlyResultsResponse struct {
@@ -95,8 +96,33 @@ type WorkerImportResponse struct {
 }
 
 type TrackedAsset struct {
+	AssetID     int64
 	Ticker      string
 	AssetType   string
 	CompanyName string
 	TaxID       string
+}
+
+type SentimentSource struct {
+	SourceType  string   `json:"source_type"`
+	Provider    string   `json:"provider"`
+	Title       string   `json:"title"`
+	URL         string   `json:"url"`
+	PublishedAt string   `json:"published_at,omitempty"`
+	Excerpt     string   `json:"excerpt,omitempty"`
+	Score       *float64 `json:"score"`
+	Weight      float64  `json:"weight"`
+}
+
+type TickerSentiment struct {
+	Status          string            `json:"status"`
+	Label           string            `json:"label,omitempty"`
+	Score           *float64          `json:"score"`
+	Confidence      *float64          `json:"confidence"`
+	Trend           string            `json:"trend,omitempty"`
+	SourceCount     int               `json:"source_count"`
+	LastRefreshedAt string            `json:"last_refreshed_at,omitempty"`
+	IsStale         bool              `json:"is_stale"`
+	Message         string            `json:"message,omitempty"`
+	Sources         []SentimentSource `json:"sources"`
 }

@@ -316,7 +316,7 @@ func (s *Service) GetLatestQuarterlyResults(ctx context.Context) (models.Quarter
 	nameIndex := indexByName(rows)
 	items := make([]models.QuarterlyResultItem, 0, len(tracked))
 	for _, asset := range tracked {
-		items = append(items, buildQuarterlyResult(asset, taxIndex, nameIndex))
+		items = append(items, s.buildQuarterlyResult(ctx, asset, taxIndex, nameIndex))
 	}
 	return models.QuarterlyResultsResponse{
 		Provider:   "cvm_itr",
@@ -454,7 +454,7 @@ type cvmRow map[string]string
 
 func (s *Service) loadTrackedAssets(ctx context.Context) ([]models.TrackedAsset, error) {
 	rows, err := s.DB.QueryContext(ctx, `
-		SELECT DISTINCT a.ticker, a.asset_type, COALESCE(m.company_name,''), COALESCE(m.tax_id,'')
+		SELECT DISTINCT a.id, a.ticker, a.asset_type, COALESCE(m.company_name,''), COALESCE(m.tax_id,'')
 		FROM assets a
 		JOIN positions p ON p.asset_id = a.id
 		LEFT JOIN asset_metadata m ON m.asset_id = a.id
@@ -466,7 +466,7 @@ func (s *Service) loadTrackedAssets(ctx context.Context) ([]models.TrackedAsset,
 	var out []models.TrackedAsset
 	for rows.Next() {
 		var item models.TrackedAsset
-		if err := rows.Scan(&item.Ticker, &item.AssetType, &item.CompanyName, &item.TaxID); err != nil {
+		if err := rows.Scan(&item.AssetID, &item.Ticker, &item.AssetType, &item.CompanyName, &item.TaxID); err != nil {
 			return nil, err
 		}
 		out = append(out, item)
@@ -597,7 +597,8 @@ func indexByName(rows []cvmRow) map[string][]cvmRow {
 	return out
 }
 
-func buildQuarterlyResult(asset models.TrackedAsset, taxIndex map[string][]cvmRow, nameIndex map[string][]cvmRow) models.QuarterlyResultItem {
+func (s *Service) buildQuarterlyResult(ctx context.Context, asset models.TrackedAsset, taxIndex map[string][]cvmRow, nameIndex map[string][]cvmRow) models.QuarterlyResultItem {
+	sentiment := s.GetOrRefreshSentiment(ctx, asset)
 	var companyRows []cvmRow
 	if asset.TaxID != "" {
 		companyRows = taxIndex[asset.TaxID]
@@ -606,11 +607,11 @@ func buildQuarterlyResult(asset models.TrackedAsset, taxIndex map[string][]cvmRo
 		companyRows = matchCompanyRows(asset.CompanyName, nameIndex)
 	}
 	if len(companyRows) == 0 {
-		return models.QuarterlyResultItem{Ticker: asset.Ticker, CompanyName: asset.CompanyName, AssetType: asset.AssetType, Highlights: []string{}, Status: "unavailable", Message: "No matching company was found in CVM ITR data for this holding."}
+		return models.QuarterlyResultItem{Ticker: asset.Ticker, CompanyName: asset.CompanyName, AssetType: asset.AssetType, Sentiment: sentiment, Highlights: []string{}, Status: "unavailable", Message: "No matching company was found in CVM ITR data for this holding."}
 	}
 	quarterRows := selectLatestQuarterRows(companyRows)
 	if len(quarterRows) == 0 {
-		return models.QuarterlyResultItem{Ticker: asset.Ticker, CompanyName: asset.CompanyName, AssetType: asset.AssetType, Highlights: []string{}, Status: "unavailable", Message: "No quarter-length DRE rows were found for the latest filing period."}
+		return models.QuarterlyResultItem{Ticker: asset.Ticker, CompanyName: asset.CompanyName, AssetType: asset.AssetType, Sentiment: sentiment, Highlights: []string{}, Status: "unavailable", Message: "No quarter-length DRE rows were found for the latest filing period."}
 	}
 	revenue := extractRevenueMetric(quarterRows)
 	netIncome := extractMetric(quarterRows, map[string]bool{"3.11": true, "3.13": true, "3.11.01": true}, []string{"LUCRO", "PREJU", "PERIODO"})
@@ -623,12 +624,12 @@ func buildQuarterlyResult(asset models.TrackedAsset, taxIndex map[string][]cvmRo
 	if revenue == nil && netIncome == nil {
 		return models.QuarterlyResultItem{
 			Ticker: asset.Ticker, CompanyName: firstNonEmpty(asset.CompanyName, quarterRows[0]["DENOM_CIA"]), AssetType: asset.AssetType, ReportDate: reportDate,
-			Highlights: []string{}, Status: "unavailable", Message: "Matched CVM company, but revenue and net income were not found in the latest DRE quarter rows.",
+			Sentiment: sentiment, Highlights: []string{}, Status: "unavailable", Message: "Matched CVM company, but revenue and net income were not found in the latest DRE quarter rows.",
 		}
 	}
 	return models.QuarterlyResultItem{
 		Ticker: asset.Ticker, CompanyName: firstNonEmpty(asset.CompanyName, quarterRows[0]["DENOM_CIA"]), AssetType: asset.AssetType, ReportDate: reportDate,
-		Revenue: revenue, NetIncome: netIncome, EBITDA: nil, NetMargin: margin, Highlights: buildHighlights(revenue, netIncome, margin), Status: "ok",
+		Revenue: revenue, NetIncome: netIncome, EBITDA: nil, NetMargin: margin, Sentiment: sentiment, Highlights: buildHighlights(revenue, netIncome, margin), Status: "ok",
 	}
 }
 
