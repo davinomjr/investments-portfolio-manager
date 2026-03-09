@@ -99,7 +99,7 @@ export function QuarterlyResults({ results }: { results: QuarterlyResultsRespons
                     <p className="text-xs font-semibold uppercase tracking-[0.18em]" style={{ color: verdict.text }}>
                       {verdict.label}
                     </p>
-                    <p className="mt-2 text-sm leading-6 text-black/75">{verdict.summary}</p>
+                    <p className="mt-2 text-sm leading-6" style={{ color: "#111827" }}>{verdict.summary}</p>
                   </div>
 
                   <SentimentPanel sentiment={item.sentiment} />
