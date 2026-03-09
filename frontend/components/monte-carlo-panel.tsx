@@ -16,7 +16,7 @@ export function MonteCarloPanel({ simulation }: { simulation: MonteCarloResponse
   const lastPoint = simulation.timeline[simulation.timeline.length - 1];
 
   return (
-    <section className="rounded-[2rem] border border-white/15 bg-[#151820] p-6">
+    <section className="rounded-[2rem] border border-white/15 bg-[#222530] p-6">
       <div className="flex flex-wrap items-start justify-between gap-6">
         <div>
           <p className="text-xs uppercase tracking-[0.3em] text-white/55">Monte Carlo</p>
@@ -30,15 +30,15 @@ export function MonteCarloPanel({ simulation }: { simulation: MonteCarloResponse
       </div>
 
       <div className="mt-6 grid gap-4 md:grid-cols-3">
-        <article className="rounded-2xl border border-white/10 bg-[#1e2028] p-4">
+        <article className="rounded-2xl border border-white/10 bg-[#272a36] p-4">
           <p className="text-xs uppercase tracking-[0.25em] text-white/55">Years</p>
           <p className="mt-2 text-2xl font-semibold">{simulation.params.years}</p>
         </article>
-        <article className="rounded-2xl border border-white/10 bg-[#1e2028] p-4">
+        <article className="rounded-2xl border border-white/10 bg-[#272a36] p-4">
           <p className="text-xs uppercase tracking-[0.25em] text-white/55">Simulations</p>
           <p className="mt-2 text-2xl font-semibold">{simulation.params.simulations}</p>
         </article>
-        <article className="rounded-2xl border border-white/10 bg-[#1e2028] p-4">
+        <article className="rounded-2xl border border-white/10 bg-[#272a36] p-4">
           <p className="text-xs uppercase tracking-[0.25em] text-white/55">Expected Return / Volatility</p>
           <p className="mt-2 text-2xl font-semibold">
             {formatPercent(simulation.params.expected_return)} / {formatPercent(simulation.params.volatility)}
@@ -48,25 +48,25 @@ export function MonteCarloPanel({ simulation }: { simulation: MonteCarloResponse
 
       {lastPoint ? (
         <div className="mt-6 grid gap-4 md:grid-cols-4">
-          <article className="rounded-2xl border border-white/10 bg-[#1e2028] p-4">
+          <article className="rounded-2xl border border-white/10 bg-[#272a36] p-4">
             <p className="text-xs uppercase tracking-[0.25em] text-white/55">Median (P50)</p>
             <p className="mt-2 text-lg font-semibold">{formatCurrency(lastPoint.p50)}</p>
           </article>
-          <article className="rounded-2xl border border-white/10 bg-[#1e2028] p-4">
+          <article className="rounded-2xl border border-white/10 bg-[#272a36] p-4">
             <p className="text-xs uppercase tracking-[0.25em] text-white/55">Conservative (P10)</p>
             <p className="mt-2 text-lg font-semibold">{formatCurrency(lastPoint.p10)}</p>
           </article>
-          <article className="rounded-2xl border border-white/10 bg-[#1e2028] p-4">
+          <article className="rounded-2xl border border-white/10 bg-[#272a36] p-4">
             <p className="text-xs uppercase tracking-[0.25em] text-white/55">Aggressive (P90)</p>
             <p className="mt-2 text-lg font-semibold">{formatCurrency(lastPoint.p90)}</p>
           </article>
-          <article className="rounded-2xl border border-white/10 bg-[#1e2028] p-4">
+          <article className="rounded-2xl border border-white/10 bg-[#272a36] p-4">
             <p className="text-xs uppercase tracking-[0.25em] text-white/55">Prob. positive</p>
             <p className="mt-2 text-lg font-semibold">{formatPercent(lastPoint.prob_positive)}</p>
           </article>
         </div>
       ) : (
-        <p className="mt-6 rounded-2xl border border-white/10 bg-[#1e2028] p-4 text-sm text-white/70">No portfolio positions found yet.</p>
+        <p className="mt-6 rounded-2xl border border-white/10 bg-[#272a36] p-4 text-sm text-white/70">No portfolio positions found yet.</p>
       )}
 
       {simulation.timeline.length > 0 ? (

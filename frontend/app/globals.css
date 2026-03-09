@@ -7,10 +7,10 @@
 }
 
 body {
-  @apply bg-[#0d0f14] text-white;
+  @apply bg-[#1a1d25] text-white;
   background-image:
     radial-gradient(circle at top left, rgba(255, 255, 255, 0.04), transparent 28%),
-    linear-gradient(180deg, #0d0f14 0%, #111318 100%);
+    linear-gradient(180deg, #1a1d25 0%, #1e2130 100%);
 }
 
 * {
@@ -19,5 +19,5 @@ body {
 
 ::selection {
   background: #ffffff;
-  color: #0d0f14;
+  color: #1a1d25;
 }

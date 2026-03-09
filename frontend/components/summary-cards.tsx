@@ -19,11 +19,11 @@ export function SummaryCards({ portfolio }: { portfolio: Portfolio }) {
         <p className="text-xs uppercase tracking-[0.3em] text-white/55">Estimated Cost Basis</p>
         <p className="mt-4 text-4xl font-semibold">{formatCurrency(portfolio.estimated_cost_basis)}</p>
       </article>
-      <article className="rounded-[2rem] border border-white/15 bg-[#151820] p-6">
+      <article className="rounded-[2rem] border border-white/15 bg-[#222530] p-6">
         <p className="text-xs uppercase tracking-[0.3em] text-white/55">Positions</p>
         <p className="mt-4 text-4xl font-semibold">{portfolio.total_positions}</p>
       </article>
-      <article className="rounded-[2rem] border border-white/15 bg-[#151820] p-6">
+      <article className="rounded-[2rem] border border-white/15 bg-[#222530] p-6">
         <p className="text-xs uppercase tracking-[0.3em] text-white/55">Largest Weight</p>
         {largestAllocation ? (
           <>
