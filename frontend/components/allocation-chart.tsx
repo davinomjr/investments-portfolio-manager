@@ -6,10 +6,16 @@ import type { Allocation } from "@/lib/api";
 import { getAssetStyle } from "@/lib/asset-style";
 
 export function AllocationChart({ allocations }: { allocations: Allocation[] }) {
-  const data = allocations.slice(0, 8).map((item) => ({
-    name: item.ticker,
-    value: Number((item.weight * 100).toFixed(2)),
-    assetType: item.asset_type,
+  const grouped = allocations.reduce<Record<string, number>>((acc, item) => {
+    const key = item.asset_type || "Other";
+    acc[key] = (acc[key] ?? 0) + item.weight * 100;
+    return acc;
+  }, {});
+
+  const data = Object.entries(grouped).map(([assetType, weight]) => ({
+    name: assetType,
+    value: Number(weight.toFixed(2)),
+    assetType,
   }));
 
   return (
@@ -35,10 +41,13 @@ export function AllocationChart({ allocations }: { allocations: Allocation[] }) 
             </Pie>
             <Tooltip
               contentStyle={{ borderRadius: "16px", border: "1px solid rgba(255,255,255,0.15)", backgroundColor: "#272a36", color: "#fff" }}
+              itemStyle={{ color: "#fff" }}
+              labelStyle={{ color: "#fff" }}
               formatter={(value: number, _name, item) => {
                 const payload = item.payload as { assetType: string };
                 return [`${value.toFixed(2)}%`, getAssetStyle(payload.assetType).label];
               }}
+              labelFormatter={() => ""}
             />
           </PieChart>
         </ResponsiveContainer>

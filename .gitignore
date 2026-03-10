@@ -19,5 +19,7 @@ backend-python/.env
 worker/.env
 frontend/.env.local
 database/*.db
+database/*.db-wal
+database/*.db-shm
 database/*.sqlite
 database/*.sqlite3
