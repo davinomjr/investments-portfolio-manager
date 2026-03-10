@@ -192,7 +192,7 @@ class B3PortfolioExtractor:
     def _open_positions_page(self, page: "Page") -> None:
         from playwright.sync_api import TimeoutError
 
-        for attempt in range(2):
+        for attempt in range(4):
             try:
                 self._goto_with_fallback(
                     page,
@@ -205,13 +205,24 @@ class B3PortfolioExtractor:
                 except Exception:
                     pass
                 page.wait_for_timeout(2000)
-                if not self._requires_login(page):
-                    return
-                if attempt == 0:
-                    # SPA auth not ready yet — wait and retry once
-                    page.wait_for_timeout(5000)
-                    continue
-                raise SessionExpiredError("B3 login required to refresh session.")
+
+                if self._requires_login(page):
+                    if attempt < 3:
+                        page.wait_for_timeout(5000)
+                        continue
+                    raise SessionExpiredError("B3 login required to refresh session.")
+
+                # The B3 SPA sometimes redirects back to the homepage before the
+                # auth state is fully settled. Detect this and retry.
+                if config.positions_path not in page.url:
+                    if attempt < 3:
+                        page.wait_for_timeout(5000)
+                        continue
+                    raise RuntimeError(
+                        f"B3 SPA redirected away from positions page (landed on {page.url!r})."
+                    )
+
+                return
             except TimeoutError as exc:
                 raise RuntimeError("Timed out while loading the B3 custody page.") from exc
 
