@@ -28,8 +28,8 @@ export type QuarterlyResultItem = {
   report_date: string | null;
   revenue: number | null;
   net_income: number | null;
-  ebitda: number | null;
   net_margin: number | null;
+  dividend_yield_12m: number | null;
   sentiment: TickerSentiment | null;
   highlights: string[];
   status: string;

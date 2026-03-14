@@ -2,7 +2,10 @@ module investments-portfolio-manager/backend
 
 go 1.24.5
 
-require modernc.org/sqlite v1.36.1
+require (
+	golang.org/x/text v0.21.0
+	modernc.org/sqlite v1.36.1
+)
 
 require (
 	github.com/dustin/go-humanize v1.0.1 // indirect

@@ -102,18 +102,20 @@ export function QuarterlyResults({ results }: { results: QuarterlyResultsRespons
                     <p className="mt-2 text-sm leading-6" style={{ color: "#111827" }}>{verdict.summary}</p>
                   </div>
 
-                  <SentimentPanel sentiment={item.sentiment} />
-
                   <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                    <Metric label="Revenue" value={formatCurrency(item.revenue)} accent={style.color} />
-                    <Metric label="Net Income" value={formatCurrency(item.net_income)} accent={style.color} />
+                    <Metric label="Revenue" value={formatCurrency(item.revenue)} />
+                    <Metric label="Net Income" value={formatCurrency(item.net_income)} />
                     <Metric
                       label="Net Margin"
                       value={item.net_margin !== null ? `${item.net_margin.toFixed(1)}%` : null}
-                      accent={style.color}
                     />
-                    <NoteCard text="EBITDA is omitted here because it is not a standardized line in CVM quarterly DRE data." />
+                    <Metric
+                      label="Div. Yield (12M)"
+                      value={item.dividend_yield_12m !== null ? `${item.dividend_yield_12m.toFixed(2)}%` : null}
+                    />
                   </div>
+
+                  <SentimentPanel sentiment={item.sentiment} />
                 </>
               ) : (
                 <>
@@ -214,13 +216,12 @@ function SentimentPanel({ sentiment }: { sentiment: QuarterlyResultsResponse["it
   );
 }
 
-function Metric({ label, value, accent }: { label: string; value: string | null; accent: string }) {
+function Metric({ label, value }: { label: string; value: string | null }) {
   return (
     <div className="rounded-[1.25rem] border border-white/10 bg-[#272a36] p-4">
       <p className="text-xs uppercase tracking-[0.18em] text-white/50">{label}</p>
       <p
-        className="mt-2 whitespace-nowrap text-[clamp(1rem,1.8vw,2.2rem)] font-semibold leading-tight"
-        style={{ color: accent }}
+        className="mt-2 whitespace-nowrap text-[clamp(1rem,1.8vw,2.2rem)] font-semibold leading-tight text-white"
         title={value ?? "N/A"}
       >
         {value ?? "N/A"}
@@ -229,14 +230,6 @@ function Metric({ label, value, accent }: { label: string; value: string | null;
   );
 }
 
-function NoteCard({ text }: { text: string }) {
-  return (
-    <div className="rounded-[1.25rem] border border-white/10 bg-[#272a36] p-4">
-      <p className="text-xs uppercase tracking-[0.18em] text-white/50">Note</p>
-      <p className="mt-2 text-sm leading-6 text-white/70">{text}</p>
-    </div>
-  );
-}
 
 function getQuarterVerdict(item: QuarterlyResultsResponse["items"][number]) {
   if (item.net_income === null && item.revenue === null) {
