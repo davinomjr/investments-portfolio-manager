@@ -19,7 +19,6 @@ func New(svc *services.Service) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /portfolio", server.handlePortfolio)
 	mux.HandleFunc("GET /positions", server.handlePositions)
-	mux.HandleFunc("PATCH /positions/{ticker}/visibility", server.handleTogglePositionVisibility)
 	mux.HandleFunc("GET /stocks/latest-results", server.handleLatestResults)
 	mux.HandleFunc("GET /stocks/{ticker}/sentiment", server.handleTickerSentiment)
 	mux.HandleFunc("GET /fiis/latest-results", server.handleLatestFIIResults)
@@ -38,19 +37,6 @@ func (s *Server) handlePortfolio(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handlePositions(w http.ResponseWriter, r *http.Request) {
 	resp, err := s.Service.GetPositions(r.Context())
 	writeJSON(w, resp, err, http.StatusOK)
-}
-
-func (s *Server) handleTogglePositionVisibility(w http.ResponseWriter, r *http.Request) {
-	ticker := r.PathValue("ticker")
-	if err := s.Service.TogglePositionVisibility(r.Context(), ticker); err != nil {
-		if strings.Contains(err.Error(), "not found") {
-			writeErr(w, err.Error(), http.StatusNotFound)
-			return
-		}
-		writeErr(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Server) handleLatestResults(w http.ResponseWriter, r *http.Request) {
@@ -140,9 +126,9 @@ func withCORS(next http.Handler) http.Handler {
 				w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 			}
 			if requestMethod := r.Header.Get("Access-Control-Request-Method"); requestMethod != "" {
-				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, OPTIONS")
+				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 			} else {
-				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, OPTIONS")
+				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 			}
 		}
 		if r.Method == http.MethodOptions {

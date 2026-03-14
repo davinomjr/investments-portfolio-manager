@@ -120,7 +120,6 @@ func Migrate(database *sql.DB) error {
 	}
 	for _, stmt := range stmts {
 		if _, err := database.Exec(stmt); err != nil {
-			// Ignore "duplicate column" errors from idempotent ALTER TABLE statements.
 			if strings.Contains(stmt, "ALTER TABLE") && strings.Contains(err.Error(), "duplicate column name") {
 				continue
 			}

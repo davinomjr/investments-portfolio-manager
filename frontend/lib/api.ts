@@ -6,7 +6,6 @@ export type Position = {
   broker: string | null;
   source: string;
   last_updated: string;
-  hidden: boolean;
 };
 
 export type Allocation = {
@@ -158,15 +157,6 @@ export async function fetchLatestImportJob(): Promise<ImportJobResponse | null> 
   if (response.status === 404) return null;
   if (!response.ok) throw new Error("Failed to load latest import job.");
   return response.json();
-}
-
-export async function togglePositionVisibility(ticker: string): Promise<void> {
-  const response = await fetch(`/api/positions/${encodeURIComponent(ticker)}/visibility`, {
-    method: "PATCH",
-  });
-  if (!response.ok && response.status !== 204) {
-    throw new Error(`Failed to toggle visibility for ${ticker}.`);
-  }
 }
 
 export async function fetchMonteCarloSimulation(
