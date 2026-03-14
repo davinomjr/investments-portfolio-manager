@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import type { Position } from "@/lib/api";
+import { setPositionsVisibility } from "@/lib/api";
 import { getAssetStyle } from "@/lib/asset-style";
 
 function formatCurrency(value: number) {
@@ -21,7 +22,17 @@ function formatDate(value: string) {
 }
 
 export function PositionsTable({ positions }: { positions: Position[] }) {
-  const [visible, setVisible] = useState(false);
+  // Derive initial state from DB: visible if at least one position is not hidden
+  const [visible, setVisible] = useState(() => positions.length === 0 || positions.some((p) => !p.hidden));
+  const [pending, startTransition] = useTransition();
+
+  function handleToggle() {
+    const next = !visible;
+    startTransition(async () => {
+      await setPositionsVisibility(next);
+      setVisible(next);
+    });
+  }
 
   return (
     <section className="rounded-[2rem] border border-white/15 bg-[#222530] p-6">
@@ -31,10 +42,11 @@ export function PositionsTable({ positions }: { positions: Position[] }) {
           <h2 className="mt-2 text-2xl font-semibold">Imported holdings</h2>
         </div>
         <button
-          onClick={() => setVisible((v) => !v)}
+          onClick={handleToggle}
+          disabled={pending}
           title={visible ? "Hide positions" : "Show positions"}
           aria-pressed={visible}
-          className="flex h-7 w-12 items-center rounded-full border border-white/20 bg-white/10 px-1 transition-colors hover:border-white/40"
+          className="flex h-7 w-12 items-center rounded-full border border-white/20 bg-white/10 px-1 transition-colors hover:border-white/40 disabled:opacity-50"
         >
           <span
             className={`h-5 w-5 rounded-full transition-transform duration-200${visible ? " translate-x-5 bg-pine" : " translate-x-0 bg-white/30"}`}
