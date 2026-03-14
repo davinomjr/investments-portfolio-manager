@@ -103,6 +103,25 @@ type TrackedAsset struct {
 	TaxID       string
 }
 
+type FIIResultItem struct {
+	Ticker          string   `json:"ticker"`
+	CompanyName     string   `json:"company_name,omitempty"`
+	AssetType       string   `json:"asset_type"`
+	DividendYield   *float64 `json:"dividend_yield"`
+	PVP             *float64 `json:"pvp"`
+	FFOYield        *float64 `json:"ffo_yield"`
+	DividendPerUnit *float64 `json:"dividend_per_unit"`
+	CapRate         *float64 `json:"cap_rate"`
+	VacancyRate     *float64 `json:"vacancy_rate"`
+	AvgDailyVolume  *float64 `json:"avg_daily_volume"`
+	Status          string   `json:"status"`
+	Message         string   `json:"message,omitempty"`
+}
+
+type FIIResultsResponse struct {
+	Items []FIIResultItem `json:"items"`
+}
+
 type SentimentSource struct {
 	SourceType  string   `json:"source_type"`
 	Provider    string   `json:"provider"`

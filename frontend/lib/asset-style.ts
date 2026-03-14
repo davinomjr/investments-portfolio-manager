@@ -50,12 +50,19 @@ const ASSET_STYLES: Record<
     border: "#86efac",
     text: "#15803d",
   },
-  bdr: {
-    label: "BDR",
+  fii: {
+    label: "FII",
     color: "#0891b2",
     soft: "#cffafe",
     border: "#67e8f9",
     text: "#0e7490",
+  },
+  bdr: {
+    label: "BDR",
+    color: "#0284c7",
+    soft: "#e0f2fe",
+    border: "#7dd3fc",
+    text: "#0369a1",
   },
   other: {
     label: "Other",

@@ -21,6 +21,7 @@ func New(svc *services.Service) http.Handler {
 	mux.HandleFunc("GET /positions", server.handlePositions)
 	mux.HandleFunc("GET /stocks/latest-results", server.handleLatestResults)
 	mux.HandleFunc("GET /stocks/{ticker}/sentiment", server.handleTickerSentiment)
+	mux.HandleFunc("GET /fiis/latest-results", server.handleLatestFIIResults)
 	mux.HandleFunc("GET /portfolio/monte-carlo", server.handleMonteCarlo)
 	mux.HandleFunc("GET /portfolio/import-jobs/latest", server.handleGetLatestImportJob)
 	mux.HandleFunc("POST /portfolio/import-b3", server.handleImportB3)
@@ -55,6 +56,11 @@ func (s *Server) handleTickerSentiment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, sentiment, nil, http.StatusOK)
+}
+
+func (s *Server) handleLatestFIIResults(w http.ResponseWriter, r *http.Request) {
+	resp, err := s.Service.GetLatestFIIResults(r.Context())
+	writeJSON(w, resp, err, http.StatusOK)
 }
 
 func (s *Server) handleMonteCarlo(w http.ResponseWriter, r *http.Request) {
