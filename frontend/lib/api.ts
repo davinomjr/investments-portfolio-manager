@@ -67,6 +67,23 @@ export type QuarterlyResultsResponse = {
   items: QuarterlyResultItem[];
 };
 
+export type FIIResultItem = {
+  ticker: string;
+  company_name: string | null;
+  asset_type: string;
+  dividend_yield: number | null;
+  pvp: number | null;
+  ffo_yield: number | null;
+  dividend_per_unit: number | null;
+  cap_rate: number | null;
+  vacancy_rate: number | null;
+  avg_daily_volume: number | null;
+  status: string;
+  message: string | null;
+};
+
+export type FIIResultsResponse = { items: FIIResultItem[] };
+
 export type MonteCarloParams = {
   years: number;
   simulations: number;
@@ -123,6 +140,14 @@ export async function fetchQuarterlyResults(): Promise<QuarterlyResultsResponse>
   const response = await fetch(`${API_BASE}/stocks/latest-results`, { cache: "no-store" });
   if (!response.ok) {
     throw new Error("Failed to load latest quarter results.");
+  }
+  return response.json();
+}
+
+export async function fetchFIIResults(): Promise<FIIResultsResponse> {
+  const response = await fetch(`${API_BASE}/fiis/latest-results`, { cache: "no-store" });
+  if (!response.ok) {
+    throw new Error("Failed to load FII results.");
   }
   return response.json();
 }
