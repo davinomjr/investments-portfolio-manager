@@ -123,7 +123,7 @@ func (s *Service) ImportFile(ctx context.Context, file multipart.File, filename 
 
 func (s *Service) GetPositions(ctx context.Context) ([]models.PositionResponse, error) {
 	rows, err := s.DB.QueryContext(ctx, `
-		SELECT a.ticker, a.asset_type, p.quantity, p.avg_price, COALESCE(p.broker,''), p.source, p.last_updated
+		SELECT a.ticker, a.asset_type, p.quantity, p.avg_price, COALESCE(p.broker,''), p.source, p.last_updated, p.hidden
 		FROM positions p
 		JOIN assets a ON a.id = p.asset_id
 		ORDER BY datetime(p.last_updated) DESC`)
@@ -134,7 +134,7 @@ func (s *Service) GetPositions(ctx context.Context) ([]models.PositionResponse, 
 	var out []models.PositionResponse
 	for rows.Next() {
 		var item models.PositionResponse
-		if err := rows.Scan(&item.Ticker, &item.AssetType, &item.Quantity, &item.AvgPrice, &item.Broker, &item.Source, &item.LastUpdated); err != nil {
+		if err := rows.Scan(&item.Ticker, &item.AssetType, &item.Quantity, &item.AvgPrice, &item.Broker, &item.Source, &item.LastUpdated, &item.Hidden); err != nil {
 			return nil, err
 		}
 		out = append(out, item)
@@ -142,11 +142,29 @@ func (s *Service) GetPositions(ctx context.Context) ([]models.PositionResponse, 
 	return out, rows.Err()
 }
 
+func (s *Service) TogglePositionVisibility(ctx context.Context, ticker string) error {
+	res, err := s.DB.ExecContext(ctx, `
+		UPDATE positions SET hidden = CASE WHEN hidden = 0 THEN 1 ELSE 0 END
+		WHERE asset_id = (SELECT id FROM assets WHERE ticker = ?)`, ticker)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return fmt.Errorf("position not found: %s", ticker)
+	}
+	return nil
+}
+
 func (s *Service) GetPortfolio(ctx context.Context) (models.PortfolioResponse, error) {
 	rows, err := s.DB.QueryContext(ctx, `
 		SELECT a.ticker, a.asset_type, p.quantity, p.avg_price
 		FROM positions p
-		JOIN assets a ON a.id = p.asset_id`)
+		JOIN assets a ON a.id = p.asset_id
+		WHERE p.hidden = 0`)
 	if err != nil {
 		return models.PortfolioResponse{}, err
 	}
