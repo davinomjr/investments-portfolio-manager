@@ -47,7 +47,7 @@ backend:
 
 run-backend: setup-backend
 	@mkdir -p "$(GO_CACHE_DIR)" "$(GO_MOD_CACHE_DIR)"
-	@cd "$(BACKEND_DIR)" && GOCACHE="$(GO_CACHE_DIR)" GOMODCACHE="$(GO_MOD_CACHE_DIR)" go run ./cmd/api
+	@cd "$(BACKEND_DIR)" && if [ -f .env ]; then set -a; source .env; set +a; fi && GOCACHE="$(GO_CACHE_DIR)" GOMODCACHE="$(GO_MOD_CACHE_DIR)" go run ./cmd/api
 
 setup-backend-python:
 	@if [ ! -d "$(BACKEND_PYTHON_VENV)" ]; then python3 -m venv "$(BACKEND_PYTHON_VENV)"; fi

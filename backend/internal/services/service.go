@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"math"
 	"math/rand"
 	"mime/multipart"
@@ -20,9 +21,11 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"unicode"
 
+	"golang.org/x/text/encoding/charmap"
 	"investments-portfolio-manager/backend/internal/config"
 	"investments-portfolio-manager/backend/internal/models"
 )
@@ -320,9 +323,14 @@ func (s *Service) GetLatestQuarterlyResults(ctx context.Context) (models.Quarter
 	}
 	taxIndex := indexByTaxID(rows)
 	nameIndex := indexByName(rows)
+	tickers := make([]string, 0, len(tracked))
+	for _, asset := range tracked {
+		tickers = append(tickers, asset.Ticker)
+	}
+	dyMap := s.fetchFundamentusDividendYields(ctx, tickers)
 	items := make([]models.QuarterlyResultItem, 0, len(tracked))
 	for _, asset := range tracked {
-		items = append(items, s.buildQuarterlyResult(ctx, asset, taxIndex, nameIndex))
+		items = append(items, s.buildQuarterlyResult(ctx, asset, taxIndex, nameIndex, dyMap))
 	}
 	return models.QuarterlyResultsResponse{
 		Provider:   "cvm_itr",
@@ -643,7 +651,83 @@ func indexByName(rows []cvmRow) map[string][]cvmRow {
 	return out
 }
 
-func (s *Service) buildQuarterlyResult(ctx context.Context, asset models.TrackedAsset, taxIndex map[string][]cvmRow, nameIndex map[string][]cvmRow) models.QuarterlyResultItem {
+// fetchFundamentusDividendYields fetches the trailing dividend yield for each
+// ticker from Fundamentus concurrently. It returns an empty map (never nil)
+// so callers can degrade gracefully when data is unavailable.
+func (s *Service) fetchFundamentusDividendYields(ctx context.Context, tickers []string) map[string]*float64 {
+	out := make(map[string]*float64, len(tickers))
+	if len(tickers) == 0 {
+		return out
+	}
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	for _, ticker := range tickers {
+		wg.Add(1)
+		go func(t string) {
+			defer wg.Done()
+			dy := s.scrapeFundamentusDY(ctx, t)
+			if dy != nil {
+				mu.Lock()
+				out[strings.ToUpper(t)] = dy
+				mu.Unlock()
+			}
+		}(ticker)
+	}
+	wg.Wait()
+	return out
+}
+
+// scrapeFundamentusDY fetches a single ticker page from Fundamentus and
+// extracts the "Div. Yield" value. Returns nil on any error.
+func (s *Service) scrapeFundamentusDY(ctx context.Context, ticker string) *float64 {
+	url := "https://www.fundamentus.com.br/detalhes.php?papel=" + strings.ToUpper(ticker)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		log.Printf("fundamentus: build request %s: %v", ticker, err)
+		return nil
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36")
+	resp, err := s.Client.Do(req)
+	if err != nil {
+		log.Printf("fundamentus: request %s: %v", ticker, err)
+		return nil
+	}
+	defer resp.Body.Close()
+	decoder := charmap.ISO8859_1.NewDecoder()
+	reader := decoder.Reader(resp.Body)
+	body, err := io.ReadAll(reader)
+	if err != nil {
+		log.Printf("fundamentus: read %s: %v", ticker, err)
+		return nil
+	}
+	html := string(body)
+	idx := strings.Index(html, "Div. Yield")
+	if idx < 0 {
+		log.Printf("fundamentus: Div. Yield not found for %s", ticker)
+		return nil
+	}
+	sub := html[idx:]
+	spanIdx := strings.Index(sub, `<span class="txt">`)
+	if spanIdx < 0 {
+		return nil
+	}
+	sub = sub[spanIdx+len(`<span class="txt">`):]
+	endIdx := strings.Index(sub, "</span>")
+	if endIdx < 0 {
+		return nil
+	}
+	raw := strings.TrimSpace(sub[:endIdx]) // e.g. "7,3%"
+	raw = strings.ReplaceAll(raw, "%", "")
+	raw = strings.ReplaceAll(raw, ",", ".")
+	v, err := strconv.ParseFloat(strings.TrimSpace(raw), 64)
+	if err != nil {
+		log.Printf("fundamentus: parse DY %q for %s: %v", raw, ticker, err)
+		return nil
+	}
+	return &v
+}
+
+func (s *Service) buildQuarterlyResult(ctx context.Context, asset models.TrackedAsset, taxIndex map[string][]cvmRow, nameIndex map[string][]cvmRow, dyMap map[string]*float64) models.QuarterlyResultItem {
 	sentiment := s.GetOrRefreshSentiment(ctx, asset)
 	var companyRows []cvmRow
 	if asset.TaxID != "" {
@@ -675,7 +759,7 @@ func (s *Service) buildQuarterlyResult(ctx context.Context, asset models.Tracked
 	}
 	return models.QuarterlyResultItem{
 		Ticker: asset.Ticker, CompanyName: firstNonEmpty(asset.CompanyName, quarterRows[0]["DENOM_CIA"]), AssetType: asset.AssetType, ReportDate: reportDate,
-		Revenue: revenue, NetIncome: netIncome, EBITDA: nil, NetMargin: margin, Sentiment: sentiment, Highlights: buildHighlights(revenue, netIncome, margin), Status: "ok",
+		Revenue: revenue, NetIncome: netIncome, NetMargin: margin, DividendYield12M: dyMap[strings.ToUpper(asset.Ticker)], Sentiment: sentiment, Highlights: buildHighlights(revenue, netIncome, margin), Status: "ok",
 	}
 }
 

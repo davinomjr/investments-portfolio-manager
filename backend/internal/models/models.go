@@ -37,10 +37,10 @@ type QuarterlyResultItem struct {
 	CompanyName string           `json:"company_name,omitempty"`
 	AssetType   string           `json:"asset_type"`
 	ReportDate  string           `json:"report_date,omitempty"`
-	Revenue     *float64         `json:"revenue"`
-	NetIncome   *float64         `json:"net_income"`
-	EBITDA      *float64         `json:"ebitda"`
-	NetMargin   *float64         `json:"net_margin"`
+	Revenue          *float64         `json:"revenue"`
+	NetIncome        *float64         `json:"net_income"`
+	NetMargin        *float64         `json:"net_margin"`
+	DividendYield12M *float64         `json:"dividend_yield_12m"`
 	Sentiment   *TickerSentiment `json:"sentiment"`
 	Highlights  []string         `json:"highlights"`
 	Status      string           `json:"status"`
