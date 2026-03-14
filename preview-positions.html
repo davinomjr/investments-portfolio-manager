@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Positions Table — Preview</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #13151f;
+      color: #f0f0f0;
+      font-family: Georgia, serif;
+      min-height: 100vh;
+      padding: 2rem;
+    }
+
+    .card {
+      background: #222530;
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 2rem;
+      padding: 1.5rem;
+      max-width: 860px;
+      margin: 0 auto;
+    }
+
+    /* Header */
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 1.5rem;
+    }
+
+    .card-label {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.3em;
+      color: rgba(255,255,255,0.55);
+      margin-bottom: 0.4rem;
+    }
+
+    .card-title {
+      font-size: 1.5rem;
+      font-weight: 600;
+    }
+
+    /* Toggle */
+    .toggle {
+      width: 3rem;
+      height: 1.75rem;
+      border-radius: 9999px;
+      border: 1px solid rgba(255,255,255,0.2);
+      background: rgba(255,255,255,0.1);
+      padding: 0 0.25rem;
+      display: flex;
+      align-items: center;
+      cursor: pointer;
+      transition: border-color 0.15s;
+      flex-shrink: 0;
+    }
+
+    .toggle:hover { border-color: rgba(255,255,255,0.4); }
+
+    .toggle-knob {
+      width: 1.25rem;
+      height: 1.25rem;
+      border-radius: 9999px;
+      transition: transform 0.2s, background-color 0.2s;
+    }
+
+    .toggle.on .toggle-knob {
+      transform: translateX(1.25rem);
+      background: #3d9e6b; /* pine */
+    }
+
+    .toggle.off .toggle-knob {
+      transform: translateX(0);
+      background: rgba(255,255,255,0.3);
+    }
+
+    /* Table */
+    .table-wrap { overflow-x: auto; }
+
+    table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0 0.5rem;
+      font-size: 0.875rem;
+      text-align: left;
+    }
+
+    thead th {
+      color: rgba(255,255,255,0.5);
+      padding-bottom: 0.5rem;
+      padding-right: 1rem;
+      font-weight: 500;
+      white-space: nowrap;
+    }
+
+    tbody tr {
+      background: #272a36;
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+
+    tbody td {
+      padding: 0.75rem 1rem;
+      white-space: nowrap;
+    }
+
+    tbody td:first-child { border-radius: 1rem 0 0 1rem; }
+    tbody td:last-child  { border-radius: 0 1rem 1rem 0; }
+
+    .ticker-link {
+      font-weight: 600;
+      color: inherit;
+      text-decoration: none;
+      transition: color 0.15s;
+    }
+    .ticker-link:hover { color: rgba(255,255,255,0.7); text-decoration: underline; }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 9999px;
+      border: 1px solid;
+      padding: 0.2rem 0.75rem;
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+    }
+
+    /* collapsed state */
+    .table-body-wrap {
+      overflow: hidden;
+      transition: opacity 0.2s;
+    }
+    .table-body-wrap.hidden-section {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+
+<div class="card">
+  <div class="card-header">
+    <div>
+      <p class="card-label">Positions</p>
+      <h2 class="card-title">Imported holdings</h2>
+    </div>
+    <button class="toggle on" id="toggle" onclick="handleToggle()" title="Hide positions" aria-pressed="true">
+      <span class="toggle-knob"></span>
+    </button>
+  </div>
+
+  <div class="table-body-wrap" id="tableWrap">
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Ticker</th>
+            <th>Type</th>
+            <th>Quantity</th>
+            <th>Avg/Close</th>
+            <th>Broker</th>
+            <th>Updated</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><a class="ticker-link" href="#">PETR4</a></td>
+            <td><span class="badge" style="background:#dbeafe;border-color:#93c5fd;color:#1d4ed8">Stock</span></td>
+            <td>100</td>
+            <td>R$&nbsp;28,90</td>
+            <td>XP</td>
+            <td>14/03/26, 09:00</td>
+          </tr>
+          <tr>
+            <td><a class="ticker-link" href="#">RBRP11</a></td>
+            <td><span class="badge" style="background:#cffafe;border-color:#67e8f9;color:#0e7490">FII</span></td>
+            <td>50</td>
+            <td>R$&nbsp;85,00</td>
+            <td>—</td>
+            <td>13/03/26, 14:22</td>
+          </tr>
+          <tr>
+            <td><a class="ticker-link" href="#">BBAS3</a></td>
+            <td><span class="badge" style="background:#dbeafe;border-color:#93c5fd;color:#1d4ed8">Stock</span></td>
+            <td>200</td>
+            <td>R$&nbsp;34,50</td>
+            <td>BTG</td>
+            <td>12/03/26, 11:05</td>
+          </tr>
+          <tr>
+            <td><a class="ticker-link" href="#">BOVA11</a></td>
+            <td><span class="badge" style="background:#ede9fe;border-color:#c4b5fd;color:#6d28d9">ETF</span></td>
+            <td>30</td>
+            <td>R$&nbsp;112,40</td>
+            <td>XP</td>
+            <td>14/03/26, 09:00</td>
+          </tr>
+          <tr>
+            <td><a class="ticker-link" href="#">TESOURO SELIC</a></td>
+            <td><span class="badge" style="background:#dcfce7;border-color:#86efac;color:#15803d">Gov Bond</span></td>
+            <td>1</td>
+            <td>R$&nbsp;14.320,00</td>
+            <td>Rico</td>
+            <td>10/03/26, 08:30</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+  let visible = true;
+
+  function handleToggle() {
+    visible = !visible;
+    const btn = document.getElementById('toggle');
+    const wrap = document.getElementById('tableWrap');
+
+    if (visible) {
+      btn.classList.replace('off', 'on');
+      btn.title = 'Hide positions';
+      btn.setAttribute('aria-pressed', 'true');
+      wrap.classList.remove('hidden-section');
+    } else {
+      btn.classList.replace('on', 'off');
+      btn.title = 'Show positions';
+      btn.setAttribute('aria-pressed', 'false');
+      wrap.classList.add('hidden-section');
+    }
+  }
+</script>
+</body>
+</html>
