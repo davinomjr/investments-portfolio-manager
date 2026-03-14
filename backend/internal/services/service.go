@@ -701,12 +701,13 @@ func (s *Service) scrapeFundamentusDY(ctx context.Context, ticker string) *float
 		return nil
 	}
 	html := string(body)
-	idx := strings.Index(html, "Div. Yield")
+	anchor := `<span class="txt">Div. Yield</span>`
+	idx := strings.Index(html, anchor)
 	if idx < 0 {
 		log.Printf("fundamentus: Div. Yield not found for %s", ticker)
 		return nil
 	}
-	sub := html[idx:]
+	sub := html[idx+len(anchor):]
 	spanIdx := strings.Index(sub, `<span class="txt">`)
 	if spanIdx < 0 {
 		return nil
@@ -725,6 +726,189 @@ func (s *Service) scrapeFundamentusDY(ctx context.Context, ticker string) *float
 		return nil
 	}
 	return &v
+}
+
+type fiiScrapedData struct {
+	DividendYield   *float64
+	PVP             *float64
+	FFOYield        *float64
+	DividendPerUnit *float64
+	CapRate         *float64
+	VacancyRate     *float64
+	AvgDailyVolume  *float64
+}
+
+func (s *Service) scrapeFundamentusFII(ctx context.Context, ticker string) *fiiScrapedData {
+	url := "https://www.fundamentus.com.br/detalhes.php?papel=" + strings.ToUpper(ticker)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		log.Printf("fundamentus fii: build request %s: %v", ticker, err)
+		return nil
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36")
+	resp, err := s.Client.Do(req)
+	if err != nil {
+		log.Printf("fundamentus fii: request %s: %v", ticker, err)
+		return nil
+	}
+	defer resp.Body.Close()
+	decoder := charmap.ISO8859_1.NewDecoder()
+	reader := decoder.Reader(resp.Body)
+	body, err := io.ReadAll(reader)
+	if err != nil {
+		log.Printf("fundamentus fii: read %s: %v", ticker, err)
+		return nil
+	}
+	html := string(body)
+	out := &fiiScrapedData{}
+	out.DividendYield = scrapeFundamentusField(html, "Div. Yield", true)
+	out.PVP = scrapeFundamentusField(html, "P/VP", false)
+	out.FFOYield = scrapeFundamentusField(html, "FFO Yield", true)
+	out.DividendPerUnit = scrapeFundamentusField(html, "Dividendo/cota", false)
+	out.CapRate = scrapeFundamentusField(html, "Cap Rate", true)
+	out.VacancyRate = scrapeFundamentusField(html, "Vacância Média", true)
+	out.AvgDailyVolume = scrapeFundamentusVolume(html, "Vol $ méd (2m)")
+	if out.DividendYield == nil && out.PVP == nil && out.FFOYield == nil && out.DividendPerUnit == nil {
+		return nil
+	}
+	return out
+}
+
+func scrapeFundamentusField(html, label string, isPercent bool) *float64 {
+	// Anchor on the label inside its txt span to avoid matching tooltip title attributes
+	// which may also contain the label text (e.g. "FFO Yield" appears in its own tooltip).
+	anchor := `<span class="txt">` + label + `</span>`
+	idx := strings.Index(html, anchor)
+	if idx < 0 {
+		return nil
+	}
+	sub := html[idx+len(anchor):]
+	spanIdx := strings.Index(sub, `<span class="txt">`)
+	if spanIdx < 0 {
+		return nil
+	}
+	sub = sub[spanIdx+len(`<span class="txt">`):]
+	endIdx := strings.Index(sub, "</span>")
+	if endIdx < 0 {
+		return nil
+	}
+	raw := strings.TrimSpace(sub[:endIdx])
+	if isPercent {
+		raw = strings.ReplaceAll(raw, "%", "")
+	}
+	raw = strings.ReplaceAll(raw, ",", ".")
+	v, err := strconv.ParseFloat(strings.TrimSpace(raw), 64)
+	if err != nil {
+		return nil
+	}
+	return &v
+}
+
+// scrapeFundamentusVolume scrapes a volume/currency field where dots are
+// thousands separators (e.g. "6.100.890") rather than decimal points.
+func scrapeFundamentusVolume(html, label string) *float64 {
+	anchor := `<span class="txt">` + label + `</span>`
+	idx := strings.Index(html, anchor)
+	if idx < 0 {
+		return nil
+	}
+	sub := html[idx+len(anchor):]
+	spanIdx := strings.Index(sub, `<span class="txt">`)
+	if spanIdx < 0 {
+		return nil
+	}
+	sub = sub[spanIdx+len(`<span class="txt">`):]
+	endIdx := strings.Index(sub, "</span>")
+	if endIdx < 0 {
+		return nil
+	}
+	raw := strings.TrimSpace(sub[:endIdx])
+	// Strip thousands-separator dots, replace decimal comma with dot
+	raw = strings.ReplaceAll(raw, ".", "")
+	raw = strings.ReplaceAll(raw, ",", ".")
+	v, err := strconv.ParseFloat(strings.TrimSpace(raw), 64)
+	if err != nil {
+		return nil
+	}
+	return &v
+}
+
+func (s *Service) fetchFIIMetrics(ctx context.Context, tickers []string) map[string]*fiiScrapedData {
+	out := make(map[string]*fiiScrapedData, len(tickers))
+	if len(tickers) == 0 {
+		return out
+	}
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	for _, ticker := range tickers {
+		wg.Add(1)
+		go func(t string) {
+			defer wg.Done()
+			data := s.scrapeFundamentusFII(ctx, t)
+			if data != nil {
+				mu.Lock()
+				out[strings.ToUpper(t)] = data
+				mu.Unlock()
+			}
+		}(ticker)
+	}
+	wg.Wait()
+	return out
+}
+
+func (s *Service) GetLatestFIIResults(ctx context.Context) (models.FIIResultsResponse, error) {
+	rows, err := s.DB.QueryContext(ctx, `
+		SELECT DISTINCT a.id, a.ticker, a.asset_type, COALESCE(m.company_name,''), COALESCE(m.tax_id,'')
+		FROM positions p JOIN assets a ON p.asset_id = a.id
+		LEFT JOIN asset_metadata m ON a.id = m.asset_id
+		WHERE p.source='b3' AND a.asset_type IN ('fii','etf_or_fii','fund')`)
+	if err != nil {
+		return models.FIIResultsResponse{}, err
+	}
+	defer rows.Close()
+	var tracked []models.TrackedAsset
+	for rows.Next() {
+		var item models.TrackedAsset
+		if err := rows.Scan(&item.AssetID, &item.Ticker, &item.AssetType, &item.CompanyName, &item.TaxID); err != nil {
+			return models.FIIResultsResponse{}, err
+		}
+		tracked = append(tracked, item)
+	}
+	if err := rows.Err(); err != nil {
+		return models.FIIResultsResponse{}, err
+	}
+	if len(tracked) == 0 {
+		return models.FIIResultsResponse{Items: []models.FIIResultItem{}}, nil
+	}
+	tickers := make([]string, 0, len(tracked))
+	for _, asset := range tracked {
+		tickers = append(tickers, asset.Ticker)
+	}
+	metricsMap := s.fetchFIIMetrics(ctx, tickers)
+	items := make([]models.FIIResultItem, 0, len(tracked))
+	for _, asset := range tracked {
+		scraped := metricsMap[strings.ToUpper(asset.Ticker)]
+		item := models.FIIResultItem{
+			Ticker:      asset.Ticker,
+			CompanyName: asset.CompanyName,
+			AssetType:   asset.AssetType,
+			Status:      "ok",
+		}
+		if scraped != nil {
+			item.DividendYield = scraped.DividendYield
+			item.PVP = scraped.PVP
+			item.FFOYield = scraped.FFOYield
+			item.DividendPerUnit = scraped.DividendPerUnit
+			item.CapRate = scraped.CapRate
+			item.VacancyRate = scraped.VacancyRate
+			item.AvgDailyVolume = scraped.AvgDailyVolume
+		} else {
+			item.Status = "unavailable"
+			item.Message = "Fundamentus data could not be loaded for this FII."
+		}
+		items = append(items, item)
+	}
+	return models.FIIResultsResponse{Items: items}, nil
 }
 
 func (s *Service) buildQuarterlyResult(ctx context.Context, asset models.TrackedAsset, taxIndex map[string][]cvmRow, nameIndex map[string][]cvmRow, dyMap map[string]*float64) models.QuarterlyResultItem {
