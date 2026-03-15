@@ -23,3 +23,4 @@ database/*.db-wal
 database/*.db-shm
 database/*.sqlite
 database/*.sqlite3
+tasks/
