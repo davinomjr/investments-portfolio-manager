@@ -155,8 +155,7 @@ func (s *Service) GetPortfolio(ctx context.Context) (models.PortfolioResponse, e
 	rows, err := s.DB.QueryContext(ctx, `
 		SELECT a.ticker, a.asset_type, p.quantity, p.avg_price
 		FROM positions p
-		JOIN assets a ON a.id = p.asset_id
-		WHERE p.hidden = 0`)
+		JOIN assets a ON a.id = p.asset_id`)
 	if err != nil {
 		return models.PortfolioResponse{}, err
 	}

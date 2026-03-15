@@ -1,10 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useTransition } from "react";
 import type { Position } from "@/lib/api";
-import { setPositionsVisibility } from "@/lib/api";
 import { getAssetStyle } from "@/lib/asset-style";
+import { useVisibility } from "@/components/visibility-context";
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("pt-BR", {
@@ -22,39 +21,15 @@ function formatDate(value: string) {
 }
 
 export function PositionsTable({ positions }: { positions: Position[] }) {
-  // Derive initial state from DB: visible if at least one position is not hidden
-  const [visible, setVisible] = useState(() => positions.length === 0 || positions.some((p) => !p.hidden));
-  const [pending, startTransition] = useTransition();
-
-  function handleToggle() {
-    const next = !visible;
-    startTransition(async () => {
-      await setPositionsVisibility(next);
-      setVisible(next);
-    });
-  }
+  const { visible } = useVisibility();
 
   return (
     <section className="rounded-[2rem] border border-white/15 bg-[#222530] p-6">
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <p className="text-xs uppercase tracking-[0.3em] text-white/55">Positions</p>
-          <h2 className="mt-2 text-2xl font-semibold">Imported holdings</h2>
-        </div>
-        <button
-          onClick={handleToggle}
-          disabled={pending}
-          title={visible ? "Hide positions" : "Show positions"}
-          aria-pressed={visible}
-          className="flex h-7 w-12 items-center rounded-full border border-white/20 bg-white/10 px-1 transition-colors hover:border-white/40 disabled:opacity-50"
-        >
-          <span
-            className={`h-5 w-5 rounded-full transition-transform duration-200${visible ? " translate-x-5 bg-pine" : " translate-x-0 bg-white/30"}`}
-          />
-        </button>
+      <div className="mb-6">
+        <p className="text-xs uppercase tracking-[0.3em] text-white/55">Positions</p>
+        <h2 className="mt-2 text-2xl font-semibold">Imported holdings</h2>
       </div>
-      {visible && (
-        <div className="overflow-x-auto">
+      <div className="overflow-x-auto">
           <table className="min-w-full border-separate border-spacing-y-2 text-left text-sm">
             <thead className="text-white/50">
               <tr>
@@ -62,8 +37,7 @@ export function PositionsTable({ positions }: { positions: Position[] }) {
                 <th className="pb-2 pr-4">Type</th>
                 <th className="pb-2 pr-4">Quantity</th>
                 <th className="pb-2 pr-4">Avg/Close</th>
-                <th className="pb-2 pr-4">Broker</th>
-                <th className="pb-2">Updated</th>
+                <th className="pb-2 pr-4">Value</th>
               </tr>
             </thead>
             <tbody>
@@ -89,16 +63,14 @@ export function PositionsTable({ positions }: { positions: Position[] }) {
                       {getAssetStyle(position.asset_type).label}
                     </span>
                   </td>
-                  <td className="px-4 py-3">{position.quantity}</td>
-                  <td className="px-4 py-3">{formatCurrency(position.avg_price)}</td>
-                  <td className="px-4 py-3">{position.broker ?? "-"}</td>
-                  <td className="rounded-r-2xl px-4 py-3">{formatDate(position.last_updated)}</td>
+                  <td className="px-4 py-3">{visible ? position.quantity : "**"}</td>
+                  <td className="px-4 py-3">{visible ? formatCurrency(position.avg_price) : "**"}</td>
+                  <td className="rounded-r-2xl px-4 py-3">{visible ? formatCurrency(position.quantity * position.avg_price) : "**"}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-      )}
     </section>
   );
 }

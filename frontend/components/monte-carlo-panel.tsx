@@ -1,4 +1,7 @@
+"use client";
+
 import type { MonteCarloResponse } from "@/lib/api";
+import { useVisibility } from "@/components/visibility-context";
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("pt-BR", {
@@ -13,7 +16,9 @@ function formatPercent(value: number) {
 }
 
 export function MonteCarloPanel({ simulation }: { simulation: MonteCarloResponse }) {
+  const { visible } = useVisibility();
   const lastPoint = simulation.timeline[simulation.timeline.length - 1];
+  const mask = (val: number) => visible ? formatCurrency(val) : "**";
 
   return (
     <section className="rounded-[2rem] border border-white/15 bg-[#222530] p-6">
@@ -25,7 +30,7 @@ export function MonteCarloPanel({ simulation }: { simulation: MonteCarloResponse
         </div>
         <div className="rounded-2xl border border-white/20 bg-white/10 px-5 py-4">
           <p className="text-xs uppercase tracking-[0.25em] text-white/60">Initial Value</p>
-          <p className="mt-2 text-2xl font-semibold">{formatCurrency(simulation.initial_value)}</p>
+          <p className="mt-2 text-2xl font-semibold">{mask(simulation.initial_value)}</p>
         </div>
       </div>
 
@@ -50,15 +55,15 @@ export function MonteCarloPanel({ simulation }: { simulation: MonteCarloResponse
         <div className="mt-6 grid gap-4 md:grid-cols-4">
           <article className="rounded-2xl border border-white/10 bg-[#272a36] p-4">
             <p className="text-xs uppercase tracking-[0.25em] text-white/55">Median (P50)</p>
-            <p className="mt-2 text-lg font-semibold">{formatCurrency(lastPoint.p50)}</p>
+            <p className="mt-2 text-lg font-semibold">{mask(lastPoint.p50)}</p>
           </article>
           <article className="rounded-2xl border border-white/10 bg-[#272a36] p-4">
             <p className="text-xs uppercase tracking-[0.25em] text-white/55">Conservative (P10)</p>
-            <p className="mt-2 text-lg font-semibold">{formatCurrency(lastPoint.p10)}</p>
+            <p className="mt-2 text-lg font-semibold">{mask(lastPoint.p10)}</p>
           </article>
           <article className="rounded-2xl border border-white/10 bg-[#272a36] p-4">
             <p className="text-xs uppercase tracking-[0.25em] text-white/55">Aggressive (P90)</p>
-            <p className="mt-2 text-lg font-semibold">{formatCurrency(lastPoint.p90)}</p>
+            <p className="mt-2 text-lg font-semibold">{mask(lastPoint.p90)}</p>
           </article>
           <article className="rounded-2xl border border-white/10 bg-[#272a36] p-4">
             <p className="text-xs uppercase tracking-[0.25em] text-white/55">Prob. positive</p>
@@ -85,10 +90,10 @@ export function MonteCarloPanel({ simulation }: { simulation: MonteCarloResponse
               {simulation.timeline.map((point) => (
                 <tr key={point.year} className="border-b border-white/10">
                   <td className="px-3 py-2 font-medium">{point.year}</td>
-                  <td className="px-3 py-2">{formatCurrency(point.p10)}</td>
-                  <td className="px-3 py-2">{formatCurrency(point.p50)}</td>
-                  <td className="px-3 py-2">{formatCurrency(point.p90)}</td>
-                  <td className="px-3 py-2">{formatCurrency(point.average)}</td>
+                  <td className="px-3 py-2">{mask(point.p10)}</td>
+                  <td className="px-3 py-2">{mask(point.p50)}</td>
+                  <td className="px-3 py-2">{mask(point.p90)}</td>
+                  <td className="px-3 py-2">{mask(point.average)}</td>
                 </tr>
               ))}
             </tbody>

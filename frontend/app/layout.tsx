@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { TopNav } from "@/components/top-nav";
+import { VisibilityProvider } from "@/components/visibility-context";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -11,8 +12,10 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="en">
       <body>
-        <TopNav />
-        {children}
+        <VisibilityProvider>
+          <TopNav />
+          {children}
+        </VisibilityProvider>
       </body>
     </html>
   );
