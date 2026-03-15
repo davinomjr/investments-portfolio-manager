@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	_ "modernc.org/sqlite"
 )
@@ -115,9 +116,13 @@ func Migrate(database *sql.DB) error {
 			error TEXT,
 			FOREIGN KEY(asset_id) REFERENCES assets(id)
 		);`,
+		`ALTER TABLE positions ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0;`,
 	}
 	for _, stmt := range stmts {
 		if _, err := database.Exec(stmt); err != nil {
+			if strings.Contains(stmt, "ALTER TABLE") && strings.Contains(err.Error(), "duplicate column name") {
+				continue
+			}
 			return err
 		}
 	}

@@ -17,6 +17,7 @@ type PositionResponse struct {
 	Broker      string  `json:"broker,omitempty"`
 	Source      string  `json:"source"`
 	LastUpdated string  `json:"last_updated"`
+	Hidden      bool    `json:"hidden"`
 }
 
 type AllocationItem struct {
