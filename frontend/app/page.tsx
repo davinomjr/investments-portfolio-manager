@@ -62,9 +62,11 @@ export default async function HomePage() {
       ) : null}
       <SummaryCards portfolio={portfolio} />
 
-      <section className="grid gap-8 lg:grid-cols-[0.9fr_1.1fr]">
+      <section className="grid gap-8 lg:grid-cols-3 lg:items-start">
         <AllocationChart allocations={portfolio.allocations} />
-        <PositionsTable positions={positions} />
+        <div className="lg:col-span-2">
+          <PositionsTable positions={positions} />
+        </div>
       </section>
     </main>
   );

@@ -6,7 +6,7 @@ import type { Allocation } from "@/lib/api";
 import { getAssetStyle } from "@/lib/asset-style";
 
 export function AllocationChart({ allocations }: { allocations: Allocation[] }) {
-  const grouped = allocations.reduce<Record<string, number>>((acc, item) => {
+  const grouped = (allocations ?? []).reduce<Record<string, number>>((acc, item) => {
     const key = item.asset_type || "Other";
     acc[key] = (acc[key] ?? 0) + item.weight * 100;
     return acc;

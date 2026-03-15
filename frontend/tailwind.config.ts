@@ -11,7 +11,7 @@ const config: Config = {
         ink: "#0f172a",
         sand: "#f5efe5",
         clay: "#e7d5b7",
-        pine: "#1f5c4a",
+        pine: "#22c55e",
         gold: "#be8c2f",
       },
       fontFamily: {
