@@ -15,7 +15,7 @@ ifneq (,$(filter run,$(MAKECMDGOALS)))
 RUN_TARGET := $(word 2,$(MAKECMDGOALS))
 endif
 
-.PHONY: help run backend backend-python frontend run-backend run-backend-python run-frontend setup-backend setup-backend-python setup-frontend
+.PHONY: help run backend backend-python frontend run-backend run-backend-python run-frontend setup-backend setup-backend-python setup-frontend test
 
 help:
 	@echo "Usage:"
@@ -25,6 +25,10 @@ help:
 	@echo "  make setup-backend"
 	@echo "  make setup-backend-python"
 	@echo "  make setup-frontend"
+	@echo "  make test"
+
+test:
+	@cd "$(BACKEND_DIR)" && GOCACHE="$(GO_CACHE_DIR)" GOMODCACHE="$(GO_MOD_CACHE_DIR)" go test ./internal/...
 
 run:
 ifeq ($(RUN_TARGET),backend)
