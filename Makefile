@@ -1,4 +1,4 @@
-SHELL := /bin/zsh
+SHELL := $(shell which zsh 2>/dev/null || which bash)
 
 PROJECT_ROOT := $(realpath $(dir $(lastword $(MAKEFILE_LIST))))
 BACKEND_DIR := $(PROJECT_ROOT)/backend
