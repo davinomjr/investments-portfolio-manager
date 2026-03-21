@@ -204,20 +204,6 @@ export function UploadPanel({ latestJob }: { latestJob?: ImportJobResponse | nul
       </div>
       {ibkrResult && <p className="mt-3 text-sm text-white/65">{ibkrResult}</p>}
 
-      <hr className="my-5 border-white/10" />
-
-      {/* Manual file upload row */}
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div>
-          <p className="text-xs uppercase tracking-[0.3em] text-white/55">B3 Manual Import</p>
-          <h2 className="mt-2 text-xl font-semibold">Load a fresh portfolio snapshot</h2>
-        </div>
-        <label className="inline-flex cursor-pointer items-center justify-center rounded-full border border-white/50 bg-transparent px-5 py-3 text-sm font-semibold text-white transition hover:border-white hover:bg-white hover:text-[#1a1d25]">
-          {isPending ? "Importing..." : "Choose B3 file"}
-          <input className="hidden" type="file" accept=".xlsx,.xlsm,.csv" onChange={onChange} disabled={isPending} />
-        </label>
-      </div>
-      <p className="mt-4 text-sm text-white/65">{message}</p>
     </section>
   );
 }
