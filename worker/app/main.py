@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 from app.extractor import B3PortfolioExtractor, SessionExpiredError
+from app.ibkr_extractor import IbkrExtractor
 
 
 def main() -> int:
@@ -22,17 +23,23 @@ def main() -> int:
     manual_parser.add_argument("path")
     manual_parser.add_argument("--json", action="store_true")
 
+    ibkr_parser = subparsers.add_parser("import-ibkr", help="Import portfolio from IBKR Flex Web Service")
+    ibkr_parser.add_argument("--json", action="store_true")
+
     args = parser.parse_args()
-    extractor = B3PortfolioExtractor()
 
     try:
-        if args.command == "login":
-            session_path = extractor.bootstrap_login()
-            payload = {"status": "ok", "session_file": str(session_path)}
-        elif args.command == "import-file":
-            payload = extractor.import_manual_file(Path(args.path)).model_dump()
+        if args.command == "import-ibkr":
+            payload = IbkrExtractor().import_portfolio().model_dump()
         else:
-            payload = extractor.import_portfolio().model_dump()
+            extractor = B3PortfolioExtractor()
+            if args.command == "login":
+                session_path = extractor.bootstrap_login()
+                payload = {"status": "ok", "session_file": str(session_path)}
+            elif args.command == "import-file":
+                payload = extractor.import_manual_file(Path(args.path)).model_dump()
+            else:
+                payload = extractor.import_portfolio().model_dump()
     except SessionExpiredError as exc:
         print(str(exc), file=sys.stderr)
         return 2
