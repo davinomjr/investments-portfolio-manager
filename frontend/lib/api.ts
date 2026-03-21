@@ -121,8 +121,18 @@ export type ImportJobResponse = {
 
 const API_BASE = process.env.INTERNAL_API_BASE_URL ?? "http://127.0.0.1:8000";
 
+async function serverFetch(path: string): Promise<Response> {
+  const { cookies } = await import("next/headers");
+  const jar = await cookies();
+  const token = jar.get("auth_token")?.value;
+  return fetch(`${API_BASE}${path}`, {
+    cache: "no-store",
+    headers: token ? { Cookie: `auth_token=${token}` } : {},
+  });
+}
+
 export async function fetchPortfolio(): Promise<Portfolio> {
-  const response = await fetch(`${API_BASE}/portfolio`, { cache: "no-store" });
+  const response = await serverFetch("/portfolio");
   if (!response.ok) {
     throw new Error("Failed to load portfolio.");
   }
@@ -130,7 +140,7 @@ export async function fetchPortfolio(): Promise<Portfolio> {
 }
 
 export async function fetchPositions(): Promise<Position[]> {
-  const response = await fetch(`${API_BASE}/positions`, { cache: "no-store" });
+  const response = await serverFetch("/positions");
   if (!response.ok) {
     throw new Error("Failed to load positions.");
   }
@@ -138,7 +148,7 @@ export async function fetchPositions(): Promise<Position[]> {
 }
 
 export async function fetchQuarterlyResults(): Promise<QuarterlyResultsResponse> {
-  const response = await fetch(`${API_BASE}/stocks/latest-results`, { cache: "no-store" });
+  const response = await serverFetch("/stocks/latest-results");
   if (!response.ok) {
     throw new Error("Failed to load latest quarter results.");
   }
@@ -146,7 +156,7 @@ export async function fetchQuarterlyResults(): Promise<QuarterlyResultsResponse>
 }
 
 export async function fetchFIIResults(): Promise<FIIResultsResponse> {
-  const response = await fetch(`${API_BASE}/fiis/latest-results`, { cache: "no-store" });
+  const response = await serverFetch("/fiis/latest-results");
   if (!response.ok) {
     throw new Error("Failed to load FII results.");
   }
@@ -154,7 +164,7 @@ export async function fetchFIIResults(): Promise<FIIResultsResponse> {
 }
 
 export async function fetchLatestImportJob(): Promise<ImportJobResponse | null> {
-  const response = await fetch(`${API_BASE}/portfolio/import-jobs/latest`, { cache: "no-store" });
+  const response = await serverFetch("/portfolio/import-jobs/latest");
   if (response.status === 404) return null;
   if (!response.ok) throw new Error("Failed to load latest import job.");
   return response.json();
