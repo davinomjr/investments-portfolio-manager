@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"time"
 )
 
 type Config struct {
@@ -24,6 +25,9 @@ type Config struct {
 	SentimentTranscriptLookbackDays int
 	SentimentMaxSourcesPerTicker    int
 	SentimentUserAgent              string
+	AuthPassword                    string
+	AuthJWTSecret                   string
+	AuthJWTExpiry                   time.Duration
 }
 
 func Load() Config {
@@ -48,6 +52,9 @@ func Load() Config {
 		SentimentTranscriptLookbackDays: intEnv("SENTIMENT_TRANSCRIPT_LOOKBACK_DAYS", 45),
 		SentimentMaxSourcesPerTicker:    intEnv("SENTIMENT_MAX_SOURCES_PER_TICKER", 10),
 		SentimentUserAgent:              env("SENTIMENT_USER_AGENT", "Mozilla/5.0 (compatible; PortfolioManagerBot/1.0; +https://localhost)"),
+		AuthPassword:                    os.Getenv("AUTH_PASSWORD"),
+		AuthJWTSecret:                   os.Getenv("AUTH_JWT_SECRET"),
+		AuthJWTExpiry:                   durationEnv("AUTH_JWT_EXPIRY", 168*time.Hour),
 	}
 	return cfg
 }
@@ -81,6 +88,18 @@ func intEnv(key string, fallback int) int {
 		return fallback
 	}
 	parsed, err := strconv.Atoi(value)
+	if err != nil {
+		return fallback
+	}
+	return parsed
+}
+
+func durationEnv(key string, fallback time.Duration) time.Duration {
+	value := os.Getenv(key)
+	if value == "" {
+		return fallback
+	}
+	parsed, err := time.ParseDuration(value)
 	if err != nil {
 		return fallback
 	}

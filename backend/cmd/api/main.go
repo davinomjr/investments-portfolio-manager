@@ -29,7 +29,7 @@ func main() {
 	service := services.New(database, cfg)
 	server := &http.Server{
 		Addr:    cfg.Addr,
-		Handler: httpapi.New(service),
+		Handler: httpapi.New(service, cfg),
 	}
 
 	log.Printf("backend listening on http://%s", cfg.Addr)

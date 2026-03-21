@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useVisibility } from "@/components/visibility-context";
 
 const ITEMS = [
@@ -13,7 +13,13 @@ const ITEMS = [
 
 export function TopNav() {
   const pathname = usePathname();
+  const router = useRouter();
   const { visible, toggle } = useVisibility();
+
+  async function handleLogout() {
+    await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
+    router.push("/login");
+  }
 
   return (
     <header className="sticky top-0 z-20 border-b border-white/15 bg-[#1a1d25]/90 backdrop-blur">
@@ -50,6 +56,12 @@ export function TopNav() {
           >
             <span className={`h-2 w-2 rounded-full ${visible ? "bg-pine" : "bg-white/30"}`} />
             {visible ? "Hide values" : "Show values"}
+          </button>
+          <button
+            onClick={handleLogout}
+            className="rounded-full border border-white/15 px-4 py-2 text-sm font-semibold text-white/50 transition hover:border-white/30 hover:text-white/80"
+          >
+            Sign out
           </button>
         </div>
       </div>
