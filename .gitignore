@@ -16,6 +16,7 @@ worker/data/
 backend/uploads/
 backend/data-cache/
 backend-python/.env
+backend/.env
 worker/.env
 frontend/.env.local
 database/*.db
