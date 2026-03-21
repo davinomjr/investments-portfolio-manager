@@ -38,6 +38,7 @@ func New(svc *services.Service, cfg config.Config) http.Handler {
 	authed.HandleFunc("GET /portfolio/import-jobs/latest", server.handleGetLatestImportJob)
 	authed.HandleFunc("POST /portfolio/import-b3", server.handleImportB3)
 	authed.HandleFunc("POST /portfolio/import-file", server.handleImportFile)
+	authed.HandleFunc("POST /portfolio/import-ibkr", server.handleImportIBKR)
 
 	// Mount authed routes under main mux with auth middleware
 	mux.Handle("/", server.withAuth(authed))
@@ -197,6 +198,15 @@ func (s *Server) handleImportFile(w http.ResponseWriter, r *http.Request) {
 	}
 	resp, err := s.Service.ImportFile(r.Context(), file, header.Filename)
 	writeJSON(w, resp, err, http.StatusAccepted)
+}
+
+func (s *Server) handleImportIBKR(w http.ResponseWriter, r *http.Request) {
+	resp, err := s.Service.ImportIBKR(r.Context())
+	if err != nil {
+		writeErr(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	writeJSON(w, resp, nil, http.StatusAccepted)
 }
 
 func withCORS(next http.Handler) http.Handler {
