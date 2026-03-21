@@ -9,12 +9,16 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
+	"investments-portfolio-manager/backend/internal/auth"
 	"investments-portfolio-manager/backend/internal/config"
 	"investments-portfolio-manager/backend/internal/db"
 	"investments-portfolio-manager/backend/internal/models"
 	"investments-portfolio-manager/backend/internal/services"
 )
+
+const testJWTSecret = "test-secret"
 
 func newTestDB(t *testing.T) *sql.DB {
 	t.Helper()
@@ -30,8 +34,18 @@ func newTestDB(t *testing.T) *sql.DB {
 }
 
 func newHandlerFromDB(database *sql.DB) http.Handler {
-	svc := services.New(database, config.Config{DefaultUserID: 1})
-	return New(svc)
+	cfg := config.Config{DefaultUserID: 1, AuthJWTSecret: testJWTSecret, AuthJWTExpiry: time.Hour}
+	svc := services.New(database, cfg)
+	return New(svc, cfg)
+}
+
+func addAuthCookie(t *testing.T, req *http.Request) {
+	t.Helper()
+	token, err := auth.GenerateToken(testJWTSecret, 1, time.Hour)
+	if err != nil {
+		t.Fatalf("generate token: %v", err)
+	}
+	req.AddCookie(&http.Cookie{Name: "auth_token", Value: token})
 }
 
 func mustDecodeJSON[T any](t *testing.T, body *bytes.Buffer) T {
@@ -84,6 +98,7 @@ func TestGetPortfolioEmpty(t *testing.T) {
 	handler := newHandlerFromDB(database)
 
 	req := httptest.NewRequest(http.MethodGet, "/portfolio", nil)
+	addAuthCookie(t, req)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -106,6 +121,7 @@ func TestGetPortfolioWithPositions(t *testing.T) {
 	handler := newHandlerFromDB(database)
 
 	req := httptest.NewRequest(http.MethodGet, "/portfolio", nil)
+	addAuthCookie(t, req)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -132,6 +148,7 @@ func TestGetPositionsEmpty(t *testing.T) {
 	handler := newHandlerFromDB(database)
 
 	req := httptest.NewRequest(http.MethodGet, "/positions", nil)
+	addAuthCookie(t, req)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -151,6 +168,7 @@ func TestGetPositionsWithData(t *testing.T) {
 	handler := newHandlerFromDB(database)
 
 	req := httptest.NewRequest(http.MethodGet, "/positions", nil)
+	addAuthCookie(t, req)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -186,6 +204,7 @@ func TestPatchVisibilityHide(t *testing.T) {
 	body := strings.NewReader(`{"visible":false}`)
 	req := httptest.NewRequest(http.MethodPatch, "/positions/visibility", body)
 	req.Header.Set("Content-Type", "application/json")
+	addAuthCookie(t, req)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -195,6 +214,7 @@ func TestPatchVisibilityHide(t *testing.T) {
 
 	// Confirm positions are hidden
 	req2 := httptest.NewRequest(http.MethodGet, "/positions", nil)
+	addAuthCookie(t, req2)
 	rec2 := httptest.NewRecorder()
 	handler.ServeHTTP(rec2, req2)
 	positions := mustDecodeJSON[[]models.PositionResponse](t, rec2.Body)
@@ -213,6 +233,7 @@ func TestPatchVisibilityShow(t *testing.T) {
 	body := strings.NewReader(`{"visible":true}`)
 	req := httptest.NewRequest(http.MethodPatch, "/positions/visibility", body)
 	req.Header.Set("Content-Type", "application/json")
+	addAuthCookie(t, req)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -222,6 +243,7 @@ func TestPatchVisibilityShow(t *testing.T) {
 
 	// Confirm positions are visible
 	req2 := httptest.NewRequest(http.MethodGet, "/positions", nil)
+	addAuthCookie(t, req2)
 	rec2 := httptest.NewRecorder()
 	handler.ServeHTTP(rec2, req2)
 	positions := mustDecodeJSON[[]models.PositionResponse](t, rec2.Body)
@@ -239,6 +261,7 @@ func TestPatchVisibilityInvalidBody(t *testing.T) {
 	body := strings.NewReader(`not-json`)
 	req := httptest.NewRequest(http.MethodPatch, "/positions/visibility", body)
 	req.Header.Set("Content-Type", "application/json")
+	addAuthCookie(t, req)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -261,6 +284,7 @@ func TestGetLatestImportJobNotFound(t *testing.T) {
 	handler := newHandlerFromDB(database)
 
 	req := httptest.NewRequest(http.MethodGet, "/portfolio/import-jobs/latest", nil)
+	addAuthCookie(t, req)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -282,6 +306,7 @@ func TestGetLatestImportJobFound(t *testing.T) {
 	handler := newHandlerFromDB(database)
 
 	req := httptest.NewRequest(http.MethodGet, "/portfolio/import-jobs/latest", nil)
+	addAuthCookie(t, req)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -310,6 +335,7 @@ func TestGetLatestImportJobPicksMostRecent(t *testing.T) {
 	handler := newHandlerFromDB(database)
 
 	req := httptest.NewRequest(http.MethodGet, "/portfolio/import-jobs/latest", nil)
+	addAuthCookie(t, req)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
