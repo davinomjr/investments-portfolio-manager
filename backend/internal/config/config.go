@@ -28,6 +28,8 @@ type Config struct {
 	AuthPassword                    string
 	AuthJWTSecret                   string
 	AuthJWTExpiry                   time.Duration
+	IBKRFlexToken                   string
+	IBKRFlexQueryID                 string
 }
 
 func Load() Config {
@@ -55,6 +57,8 @@ func Load() Config {
 		AuthPassword:                    os.Getenv("AUTH_PASSWORD"),
 		AuthJWTSecret:                   os.Getenv("AUTH_JWT_SECRET"),
 		AuthJWTExpiry:                   durationEnv("AUTH_JWT_EXPIRY", 168*time.Hour),
+		IBKRFlexToken:                   os.Getenv("IBKR_FLEX_TOKEN"),
+		IBKRFlexQueryID:                 os.Getenv("IBKR_FLEX_QUERY_ID"),
 	}
 	return cfg
 }

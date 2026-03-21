@@ -58,6 +58,8 @@ export function UploadPanel({ latestJob }: { latestJob?: ImportJobResponse | nul
   const [syncResult, setSyncResult] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const [isSyncing, startSyncTransition] = useTransition();
+  const [ibkrResult, setIbkrResult] = useState<string | null>(null);
+  const [isIbkrSyncing, startIbkrSyncTransition] = useTransition();
 
   const onChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -127,12 +129,46 @@ export function UploadPanel({ latestJob }: { latestJob?: ImportJobResponse | nul
     });
   };
 
+  const onSyncIBKR = () => {
+    startIbkrSyncTransition(async () => {
+      setIbkrResult(null);
+      try {
+        const response = await fetch(`${API_BASE}/portfolio/import-ibkr`, { method: "POST" });
+        if (!response.ok) {
+          const payload = await response.json().catch(() => ({}));
+          setIbkrResult(payload.detail ?? "IBKR sync failed.");
+          return;
+        }
+        setIbkrResult("Syncing IBKR… this may take a moment.");
+        for (let i = 0; i < 30; i++) {
+          await new Promise((r) => setTimeout(r, 5000));
+          const jobRes = await fetch(`${API_BASE}/portfolio/import-jobs/latest`).catch(() => null);
+          if (!jobRes?.ok) continue;
+          const job = await jobRes.json().catch(() => null);
+          if (!job) continue;
+          if (job.status === "completed") {
+            setIbkrResult(job.detail ?? "IBKR sync complete.");
+            router.refresh();
+            return;
+          }
+          if (job.status === "failed") {
+            setIbkrResult(job.detail ?? "IBKR sync failed.");
+            return;
+          }
+        }
+        setIbkrResult("IBKR sync is taking longer than expected — check back shortly.");
+      } catch (error) {
+        setIbkrResult(error instanceof Error ? error.message : "IBKR sync failed.");
+      }
+    });
+  };
+
   return (
     <section className="rounded-[2rem] border border-white/15 bg-[#222530] p-6 shadow-[0_18px_60px_rgba(0,0,0,0.25)]">
-      {/* B3 Auto Sync row */}
+      {/* B3 Sync row */}
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
-          <p className="text-xs uppercase tracking-[0.3em] text-white/55">B3 Auto Sync</p>
+          <p className="text-xs uppercase tracking-[0.3em] text-white/55">B3 Sync</p>
           <h2 className="mt-2 text-2xl font-semibold">Sync directly from B3</h2>
           {latestJob && (
             <div className="mt-2">
@@ -149,6 +185,24 @@ export function UploadPanel({ latestJob }: { latestJob?: ImportJobResponse | nul
         </button>
       </div>
       {syncResult && <p className="mt-3 text-sm text-white/65">{syncResult}</p>}
+
+      <hr className="my-5 border-white/10" />
+
+      {/* IBKR Sync row */}
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div>
+          <p className="text-xs uppercase tracking-[0.3em] text-white/55">IBKR Sync</p>
+          <h2 className="mt-2 text-2xl font-semibold">Sync directly from IBKR</h2>
+        </div>
+        <button
+          onClick={onSyncIBKR}
+          disabled={isIbkrSyncing}
+          className="inline-flex cursor-pointer items-center justify-center rounded-full border border-white bg-white px-5 py-3 text-sm font-semibold text-[#1a1d25] transition hover:bg-transparent hover:text-white disabled:opacity-50"
+        >
+          {isIbkrSyncing ? "Syncing..." : "Sync from IBKR"}
+        </button>
+      </div>
+      {ibkrResult && <p className="mt-3 text-sm text-white/65">{ibkrResult}</p>}
 
       <hr className="my-5 border-white/10" />
 

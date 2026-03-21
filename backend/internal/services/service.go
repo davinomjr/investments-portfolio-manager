@@ -91,6 +91,33 @@ func (s *Service) ImportB3(ctx context.Context) (models.ImportJobResponse, error
 	return job, nil
 }
 
+func (s *Service) ImportIBKR(ctx context.Context) (models.ImportJobResponse, error) {
+	if s.Config.IBKRFlexToken == "" || s.Config.IBKRFlexQueryID == "" {
+		return models.ImportJobResponse{}, fmt.Errorf("IBKR_FLEX_TOKEN and IBKR_FLEX_QUERY_ID must be configured")
+	}
+	jobID, job, err := s.createJob(ctx, "ibkr", "running", "IBKR import started")
+	if err != nil {
+		return models.ImportJobResponse{}, err
+	}
+	go func() {
+		bgCtx := context.Background()
+		holdings, err := s.runWorkerWithEnv(bgCtx, []string{"import-ibkr", "--json"}, map[string]string{
+			"IBKR_FLEX_TOKEN":    s.Config.IBKRFlexToken,
+			"IBKR_FLEX_QUERY_ID": s.Config.IBKRFlexQueryID,
+		})
+		if err != nil {
+			s.updateJob(bgCtx, jobID, "failed", err.Error())
+			return
+		}
+		if err := s.upsertHoldings(bgCtx, holdings); err != nil {
+			s.updateJob(bgCtx, jobID, "failed", err.Error())
+			return
+		}
+		s.updateJob(bgCtx, jobID, "completed", fmt.Sprintf("Imported %d positions from IBKR", len(holdings)))
+	}()
+	return job, nil
+}
+
 func (s *Service) ImportFile(ctx context.Context, file multipart.File, filename string) (models.ImportJobResponse, error) {
 	if err := os.MkdirAll(s.Config.UploadDir, 0o755); err != nil {
 		return models.ImportJobResponse{}, err
@@ -423,6 +450,7 @@ func (s *Service) runWorker(ctx context.Context, args []string) ([]models.Holdin
 		cmd = exec.CommandContext(workerCtx, s.Config.WorkerPython, all...)
 	}
 	cmd.Dir = s.Config.WorkerDir
+	cmd.Env = os.Environ()
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		msg := strings.TrimSpace(string(output))
@@ -439,6 +467,45 @@ func (s *Service) runWorker(ctx context.Context, args []string) ([]models.Holdin
 		payload.Holdings[i].Ticker = strings.ToUpper(payload.Holdings[i].Ticker)
 		if payload.Holdings[i].Currency == "" {
 			payload.Holdings[i].Currency = "BRL"
+		}
+	}
+	return payload.Holdings, nil
+}
+
+func (s *Service) runWorkerWithEnv(ctx context.Context, args []string, extraEnv map[string]string) ([]models.HoldingPayload, error) {
+	workerCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	go func() {
+		select {
+		case <-ctx.Done():
+			cancel()
+		case <-workerCtx.Done():
+		}
+	}()
+	all := append([]string{"-m", s.Config.WorkerModule}, args...)
+	cmd := exec.CommandContext(workerCtx, s.Config.WorkerPython, all...)
+	cmd.Dir = s.Config.WorkerDir
+	env := os.Environ()
+	for k, v := range extraEnv {
+		env = append(env, k+"="+v)
+	}
+	cmd.Env = env
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		msg := strings.TrimSpace(string(output))
+		if msg == "" {
+			msg = err.Error()
+		}
+		return nil, errors.New(msg)
+	}
+	var payload models.WorkerImportResponse
+	if err := json.Unmarshal(output, &payload); err != nil {
+		return nil, err
+	}
+	for i := range payload.Holdings {
+		payload.Holdings[i].Ticker = strings.ToUpper(payload.Holdings[i].Ticker)
+		if payload.Holdings[i].Currency == "" {
+			payload.Holdings[i].Currency = "USD"
 		}
 	}
 	return payload.Holdings, nil
