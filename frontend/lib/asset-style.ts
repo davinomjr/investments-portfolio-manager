@@ -23,11 +23,25 @@ const ASSET_STYLES: Record<
     text: "#6d28d9",
   },
   international_etf: {
-    label: "International",
+    label: "Intl ETF",
     color: "#9333ea",
     soft: "#f3e8ff",
     border: "#d8b4fe",
     text: "#7e22ce",
+  },
+  international_stock: {
+    label: "Intl Stock",
+    color: "#a855f7",
+    soft: "#faf5ff",
+    border: "#e9d5ff",
+    text: "#9333ea",
+  },
+  international_bond: {
+    label: "Intl Bond",
+    color: "#7c3aed",
+    soft: "#ede9fe",
+    border: "#c4b5fd",
+    text: "#6d28d9",
   },
   etf_or_fii: {
     label: "ETF / FII",

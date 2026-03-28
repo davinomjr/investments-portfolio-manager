@@ -18,14 +18,14 @@ FETCH_URL = (
 )
 
 ASSET_CLASS_MAP = {
-    "STK": "stock",
-    "FND": "etf",
-    "ETF": "etf",
-    "OPT": "option",
-    "FUT": "future",
-    "BOND": "bond",
-    "CASH": "cash",
-    "WAR": "warrant",
+    "STK": "international_stock",
+    "FND": "international_etf",
+    "ETF": "international_etf",
+    "OPT": "international_option",
+    "FUT": "international_future",
+    "BOND": "international_bond",
+    "CASH": "international_cash",
+    "WAR": "international_warrant",
 }
 
 MAX_RETRIES = 5
@@ -84,7 +84,12 @@ class IbkrExtractor:
             if not symbol:
                 continue
             asset_class_raw = pos.get("assetClass", "STK")
-            asset_type = ASSET_CLASS_MAP.get(asset_class_raw, "stock")
+            sub_category = pos.get("subCategory", "").upper()
+            # IBKR classifies ETFs under assetClass=STK; subCategory=ETF identifies them
+            if sub_category == "ETF":
+                asset_type = "international_etf"
+            else:
+                asset_type = ASSET_CLASS_MAP.get(asset_class_raw, f"international_{asset_class_raw.lower()}" if asset_class_raw else "international_stock")
             quantity = float(pos.get("position") or pos.get("quantity") or 0)
             cost_basis = float(pos.get("costBasisMoney") or 0)
             avg_price = (cost_basis / quantity) if quantity else 0.0
