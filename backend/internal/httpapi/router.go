@@ -23,6 +23,7 @@ func New(svc *services.Service, cfg config.Config) http.Handler {
 	mux := http.NewServeMux()
 
 	// Unauthenticated routes
+	mux.HandleFunc("GET /health", server.handleHealth)
 	mux.HandleFunc("POST /auth/login", server.handleLogin)
 	mux.HandleFunc("POST /auth/logout", server.handleLogout)
 
@@ -43,7 +44,13 @@ func New(svc *services.Service, cfg config.Config) http.Handler {
 	// Mount authed routes under main mux with auth middleware
 	mux.Handle("/", server.withAuth(authed))
 
-	return withCORS(mux)
+	return withCORS(mux, cfg.CORSOrigins)
+}
+
+func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 
 func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
@@ -209,10 +216,14 @@ func (s *Server) handleImportIBKR(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, resp, nil, http.StatusAccepted)
 }
 
-func withCORS(next http.Handler) http.Handler {
+func withCORS(next http.Handler, allowedOrigins []string) http.Handler {
+	allowed := make(map[string]bool, len(allowedOrigins))
+	for _, o := range allowedOrigins {
+		allowed[o] = true
+	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
-		if origin == "http://localhost:3000" || origin == "http://127.0.0.1:3000" {
+		if allowed[origin] {
 			w.Header().Set("Vary", "Origin")
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Access-Control-Allow-Credentials", "true")

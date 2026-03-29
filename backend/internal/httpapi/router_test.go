@@ -34,7 +34,7 @@ func newTestDB(t *testing.T) *sql.DB {
 }
 
 func newHandlerFromDB(database *sql.DB) http.Handler {
-	cfg := config.Config{DefaultUserID: 1, AuthJWTSecret: testJWTSecret, AuthJWTExpiry: time.Hour}
+	cfg := config.Config{DefaultUserID: 1, AuthJWTSecret: testJWTSecret, AuthJWTExpiry: time.Hour, CORSOrigins: []string{"http://localhost:3000", "http://127.0.0.1:3000"}}
 	svc := services.New(database, cfg)
 	return New(svc, cfg)
 }

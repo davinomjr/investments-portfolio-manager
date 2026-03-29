@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { FIIResults } from "@/components/fii-results";
 import { fetchFIIResults, type FIIResultsResponse } from "@/lib/api";
 

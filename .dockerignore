@@ -1,0 +1,13 @@
+node_modules
+.next
+.env*
+*.db
+__pycache__
+.venv
+backend-python
+.git
+frontend/node_modules
+frontend/.next
+worker/.venv
+worker/data
+database/portfolio.db
