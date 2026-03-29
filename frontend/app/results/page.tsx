@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { QuarterlyResults } from "@/components/quarterly-results";
 import { fetchQuarterlyResults, type QuarterlyResultsResponse } from "@/lib/api";
 

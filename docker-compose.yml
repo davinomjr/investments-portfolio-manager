@@ -1,0 +1,31 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - portfolio-data:/data
+      - ./worker/data:/app/worker/data
+    env_file:
+      - backend/.env
+      - worker/.env
+    environment:
+      - ADDR=0.0.0.0:8000
+      - DATABASE_URL=/data/portfolio.db
+      - CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+
+  frontend:
+    build:
+      context: frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - INTERNAL_API_BASE_URL=http://backend:8000
+    depends_on:
+      - backend
+
+volumes:
+  portfolio-data:

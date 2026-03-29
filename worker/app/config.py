@@ -31,7 +31,7 @@ class WorkerConfig:
     login_timeout_ms: int = 120000
     session_file: Path = Path(__file__).resolve().parents[1] / "data" / "b3_session.json"
     download_dir: Path = Path(__file__).resolve().parents[1] / "data" / "downloads"
-    headless: bool = False
+    headless: bool = field(default_factory=lambda: os.environ.get("HEADLESS", "false").lower() in ("1", "true", "yes"))
     timeout_ms: int = 30000
     b3_cpf: str = field(default_factory=lambda: os.environ.get("B3_CPF", ""))
     b3_password: str = field(default_factory=lambda: os.environ.get("B3_PASSWORD", ""))

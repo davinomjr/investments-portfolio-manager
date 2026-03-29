@@ -158,7 +158,7 @@ func (s *Service) GetPositions(ctx context.Context) ([]models.PositionResponse, 
 		return nil, err
 	}
 	defer rows.Close()
-	var out []models.PositionResponse
+	out := make([]models.PositionResponse, 0)
 	for rows.Next() {
 		var item models.PositionResponse
 		if err := rows.Scan(&item.Ticker, &item.AssetType, &item.Quantity, &item.AvgPrice, &item.Broker, &item.Source, &item.LastUpdated, &item.Hidden); err != nil {
@@ -206,7 +206,7 @@ func (s *Service) GetPortfolio(ctx context.Context) (models.PortfolioResponse, e
 		total += value
 		allocByTicker[ticker] = alloc{assetType: assetType, value: value}
 	}
-	var allocations []models.AllocationItem
+	allocations := make([]models.AllocationItem, 0, len(allocByTicker))
 	for ticker, item := range allocByTicker {
 		weight := 0.0
 		if total > 0 {

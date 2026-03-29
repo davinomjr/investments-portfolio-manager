@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -30,6 +31,7 @@ type Config struct {
 	AuthJWTExpiry                   time.Duration
 	IBKRFlexToken                   string
 	IBKRFlexQueryID                 string
+	CORSOrigins                     []string
 }
 
 func Load() Config {
@@ -59,6 +61,7 @@ func Load() Config {
 		AuthJWTExpiry:                   durationEnv("AUTH_JWT_EXPIRY", 168*time.Hour),
 		IBKRFlexToken:                   os.Getenv("IBKR_FLEX_TOKEN"),
 		IBKRFlexQueryID:                 os.Getenv("IBKR_FLEX_QUERY_ID"),
+		CORSOrigins:                     parseCORSOrigins(env("CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000")),
 	}
 	return cfg
 }
@@ -108,6 +111,17 @@ func durationEnv(key string, fallback time.Duration) time.Duration {
 		return fallback
 	}
 	return parsed
+}
+
+func parseCORSOrigins(raw string) []string {
+	parts := strings.Split(raw, ",")
+	origins := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if o := strings.TrimSpace(p); o != "" {
+			origins = append(origins, o)
+		}
+	}
+	return origins
 }
 
 func defaultWorkerPython(projectRoot string) string {

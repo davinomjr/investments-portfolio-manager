@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { MonteCarloPanel } from "@/components/monte-carlo-panel";
 import { fetchMonteCarloSimulation, type MonteCarloResponse } from "@/lib/api";
 

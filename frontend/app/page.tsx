@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { AllocationChart } from "@/components/allocation-chart";
 import { PositionsTable } from "@/components/positions-table";
 import { SummaryCards } from "@/components/summary-cards";
