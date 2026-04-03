@@ -170,7 +170,8 @@ func (s *Server) handleMonteCarlo(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleGetLatestImportJob(w http.ResponseWriter, r *http.Request) {
-	resp, err := s.Service.GetLatestImportJob(r.Context())
+	source := r.URL.Query().Get("source")
+	resp, err := s.Service.GetLatestImportJob(r.Context(), source)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			writeErr(w, "no import jobs found", http.StatusNotFound)

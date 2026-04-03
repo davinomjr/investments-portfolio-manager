@@ -107,7 +107,7 @@ export function UploadPanel({ latestJob }: { latestJob?: ImportJobResponse | nul
         setSyncResult("Syncing… this may take a minute.");
         for (let i = 0; i < 60; i++) {
           await new Promise((r) => setTimeout(r, 5000));
-          const jobRes = await fetch(`${API_BASE}/portfolio/import-jobs/latest`).catch(() => null);
+          const jobRes = await fetch(`${API_BASE}/portfolio/import-jobs/latest?source=b3`).catch(() => null);
           if (!jobRes?.ok) continue;
           const job = await jobRes.json().catch(() => null);
           if (!job) continue;
@@ -143,7 +143,7 @@ export function UploadPanel({ latestJob }: { latestJob?: ImportJobResponse | nul
         setIbkrResult("Syncing IBKR… this may take a moment.");
         for (let i = 0; i < 30; i++) {
           await new Promise((r) => setTimeout(r, 5000));
-          const jobRes = await fetch(`${API_BASE}/portfolio/import-jobs/latest`).catch(() => null);
+          const jobRes = await fetch(`${API_BASE}/portfolio/import-jobs/latest?source=ibkr`).catch(() => null);
           if (!jobRes?.ok) continue;
           const job = await jobRes.json().catch(() => null);
           if (!job) continue;
