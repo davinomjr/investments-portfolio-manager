@@ -31,7 +31,6 @@ COPY --from=go-builder /app/server ./server
 # Create runtime directories
 RUN mkdir -p /data /app/backend/uploads /app/backend/data-cache /app/worker/data
 
-ENV ADDR=0.0.0.0:8000
 ENV DATABASE_URL=/data/portfolio.db
 ENV UPLOAD_DIR=/app/backend/uploads
 ENV DATA_CACHE_DIR=/app/backend/data-cache

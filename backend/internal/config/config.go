@@ -39,7 +39,7 @@ func Load() Config {
 	projectRoot := filepath.Dir(cwd)
 	workerPython := env("WORKER_PYTHON", defaultWorkerPython(projectRoot))
 	cfg := Config{
-		Addr:                            env("ADDR", "127.0.0.1:8000"),
+		Addr:                            env("ADDR", railwayAddr()),
 		DatabaseURL:                     env("DATABASE_URL", filepath.Join(projectRoot, "database", "portfolio.db")),
 		ProjectRoot:                     projectRoot,
 		WorkerDir:                       env("WORKER_DIR", filepath.Join(projectRoot, "worker")),
@@ -64,6 +64,14 @@ func Load() Config {
 		CORSOrigins:                     parseCORSOrigins(env("CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000")),
 	}
 	return cfg
+}
+
+// railwayAddr returns the listen address, respecting Railway's injected PORT env var.
+func railwayAddr() string {
+	if port := os.Getenv("PORT"); port != "" {
+		return "0.0.0.0:" + port
+	}
+	return "127.0.0.1:8000"
 }
 
 func env(key, fallback string) string {
