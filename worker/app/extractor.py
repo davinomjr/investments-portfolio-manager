@@ -15,27 +15,47 @@ class SessionExpiredError(RuntimeError):
     pass
 
 
+_STEALTH_ARGS = [
+    "--disable-blink-features=AutomationControlled",
+    "--no-sandbox",
+    "--disable-dev-shm-usage",
+    "--disable-gpu",
+]
+
+_STEALTH_UA = (
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+)
+
+
 class B3PortfolioExtractor:
     def __init__(self) -> None:
         self.session_file = config.session_file
         self.download_dir = config.download_dir
+
+    def _new_context(self, playwright, *, headless: bool, accept_downloads: bool = False):
+        """Launch browser and create a context with stealth settings."""
+        browser = playwright.chromium.launch(headless=headless, args=_STEALTH_ARGS)
+        storage = str(self.session_file) if self.session_file.exists() else None
+        context = browser.new_context(
+            storage_state=storage,
+            user_agent=_STEALTH_UA,
+            viewport={"width": 1920, "height": 1080},
+            accept_downloads=accept_downloads,
+            ignore_https_errors=True,
+            locale="pt-BR",
+            timezone_id="America/Sao_Paulo",
+        )
+        page = context.new_page()
+        page.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+        return browser, context, page
 
     def bootstrap_login(self) -> Path:
         from playwright.sync_api import sync_playwright
 
         self.session_file.parent.mkdir(parents=True, exist_ok=True)
         with sync_playwright() as playwright:
-            browser = playwright.chromium.launch(
-                headless=False,
-                args=[
-                    "--disable-blink-features=AutomationControlled",
-                ],
-            )
-            context = browser.new_context(
-                ignore_https_errors=True,
-                locale="pt-BR",
-                timezone_id="America/Sao_Paulo",
-            )
+            browser, context, page = self._new_context(playwright, headless=False)
             page = context.new_page()
             # For manual login, allow Cloudflare/challenge pages to load even if the
             # initial navigation reports an HTTP response error at the network layer.
@@ -55,21 +75,9 @@ class B3PortfolioExtractor:
 
         self.download_dir.mkdir(parents=True, exist_ok=True)
         with sync_playwright() as playwright:
-            browser = playwright.chromium.launch(
-                headless=config.headless,
-                args=[
-                    "--disable-blink-features=AutomationControlled",
-                ],
+            browser, context, page = self._new_context(
+                playwright, headless=config.headless, accept_downloads=True,
             )
-            storage = str(self.session_file) if self.session_file.exists() else None
-            context = browser.new_context(
-                storage_state=storage,
-                accept_downloads=True,
-                ignore_https_errors=True,
-                locale="pt-BR",
-                timezone_id="America/Sao_Paulo",
-            )
-            page = context.new_page()
 
             # Navigate to dashboard; B3 is a React SPA that returns 404 at the
             # network layer for all routes, so we allow HTTP errors here.
