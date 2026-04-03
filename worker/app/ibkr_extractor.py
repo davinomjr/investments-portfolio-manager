@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import time
+import urllib.error
 import urllib.request
 import xml.etree.ElementTree as ET
 
@@ -32,8 +33,8 @@ MAX_RETRIES = 5
 POLL_INTERVAL = 10  # seconds
 
 
-def _fetch(url: str) -> str:
-    with urllib.request.urlopen(url, timeout=30) as resp:
+def _fetch(url: str, timeout: int = 60) -> str:
+    with urllib.request.urlopen(url, timeout=timeout) as resp:
         return resp.read().decode("utf-8")
 
 
@@ -59,7 +60,13 @@ class IbkrExtractor:
     def _fetch_report(self, ref_code: str) -> str:
         url = FETCH_URL.format(token=self.token, ref_code=ref_code)
         for attempt in range(1, MAX_RETRIES + 1):
-            raw = _fetch(url)
+            try:
+                raw = _fetch(url)
+            except (urllib.error.URLError, OSError) as exc:
+                if attempt == MAX_RETRIES:
+                    raise RuntimeError(f"IBKR Flex fetch failed after {MAX_RETRIES} attempts: {exc}") from exc
+                time.sleep(POLL_INTERVAL)
+                continue
             if "<FlexQueryResponse" in raw:
                 return raw
             try:

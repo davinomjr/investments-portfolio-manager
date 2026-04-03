@@ -56,16 +56,15 @@ export function UploadPanel({ latestJob }: { latestJob?: ImportJobResponse | nul
   const router = useRouter();
   const [message, setMessage] = useState<string>("Upload a B3 `.xlsx` or `.csv` export to refresh positions.");
   const [syncResult, setSyncResult] = useState<string | null>(null);
-  const [isPending, startTransition] = useTransition();
   const [isSyncing, startSyncTransition] = useTransition();
   const [ibkrResult, setIbkrResult] = useState<string | null>(null);
   const [isIbkrSyncing, startIbkrSyncTransition] = useTransition();
 
-  const onChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const onFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    startTransition(async () => {
+    startSyncTransition(async () => {
       try {
         const body = new FormData();
         body.append("file", file);
@@ -80,7 +79,7 @@ export function UploadPanel({ latestJob }: { latestJob?: ImportJobResponse | nul
           setMessage(payload.detail ?? "Import failed.");
           return;
         }
-        setMessage(payload.detail ?? `Imported ${file.name}.`);
+        setMessage(payload.detail ?? `Imported ${file.name}. Refreshing...`);
         router.refresh();
       } catch (error) {
         setMessage(
@@ -88,6 +87,8 @@ export function UploadPanel({ latestJob }: { latestJob?: ImportJobResponse | nul
             ? `${error.message}. Check that the API is running and reachable at ${API_BASE}.`
             : `Upload failed. Check that the API is running and reachable at ${API_BASE}.`,
         );
+      } finally {
+        event.target.value = "";
       }
     });
   };
@@ -165,6 +166,22 @@ export function UploadPanel({ latestJob }: { latestJob?: ImportJobResponse | nul
 
   return (
     <section className="rounded-[2rem] border border-white/15 bg-[#222530] p-6 shadow-[0_18px_60px_rgba(0,0,0,0.25)]">
+      {/* Manual file upload row */}
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div>
+          <p className="text-xs uppercase tracking-[0.3em] text-white/55">Manual Import</p>
+          <h2 className="mt-2 text-2xl font-semibold">Upload B3 export file</h2>
+          <p className="mt-1 text-sm text-white/65">Upload a `.xlsx` or `.csv` export from B3.</p>
+        </div>
+        <label className="inline-flex cursor-pointer items-center justify-center rounded-full border border-white bg-white px-5 py-3 text-sm font-semibold text-[#1a1d25] transition hover:bg-transparent hover:text-white">
+          Select File
+          <input type="file" accept=".xlsx,.xlsm,.csv" onChange={onFileSelect} className="hidden" />
+        </label>
+      </div>
+      {message && <p className="mt-3 text-sm text-white/65">{message}</p>}
+
+      <hr className="my-5 border-white/10" />
+
       {/* B3 Sync row */}
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
