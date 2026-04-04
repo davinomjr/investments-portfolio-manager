@@ -30,15 +30,13 @@ export function TopNav() {
 
   return (
     <header className="sticky top-0 z-20 border-b border-white/15 bg-[#1a1d25]/90 backdrop-blur">
-      <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-3 md:px-10 md:py-4">
-        <div className="min-w-0">
-          <p className="text-[11px] uppercase tracking-[0.35em] text-white/45">Portfolio Manager</p>
-          <p className="mt-1 hidden text-sm text-white/65 sm:block">
-            B3 import, holdings review, quarterly checks, and Monte Carlo simulation.
-          </p>
-        </div>
+      <div className="mx-auto flex max-w-7xl items-center justify-end gap-3 px-4 py-3 md:px-10 md:py-4">
         <div className="flex shrink-0 items-center gap-2 md:gap-4">
           <nav className="flex items-center gap-1 rounded-full border border-white/15 p-1">
+            <span className="px-3 py-1.5 text-[10px] uppercase tracking-[0.3em] text-white/35 md:px-4 md:py-2">
+              Portfolio Manager
+            </span>
+            <span className="h-4 w-px bg-white/15" />
             {ITEMS.map((item) => {
               const active = pathname === item.href;
               const pending = pendingHref === item.href && !active;
