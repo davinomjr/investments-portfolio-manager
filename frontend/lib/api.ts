@@ -171,7 +171,8 @@ export async function fetchLatestImportJob(): Promise<ImportJobResponse | null> 
 }
 
 export async function setPositionsVisibility(visible: boolean): Promise<void> {
-  const response = await fetch(`/api/positions/visibility`, {
+  const base = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+  const response = await fetch(`${base}/api/positions/visibility`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ visible }),

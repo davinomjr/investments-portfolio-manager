@@ -14,14 +14,15 @@ export default function LoginPage() {
     setError("");
     setLoading(true);
     try {
-      const res = await fetch("/api/auth/login", {
+      const base = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+      const res = await fetch(`${base}/api/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ password }),
         credentials: "include",
       });
       if (res.ok) {
-        window.location.replace("/");
+        window.location.replace(`${base}/`);
       } else {
         const data = await res.json().catch(() => ({}));
         setError(data.detail ?? "Invalid password.");

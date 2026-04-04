@@ -17,8 +17,9 @@ export function TopNav() {
   const { visible, toggle } = useVisibility();
 
   async function handleLogout() {
-    await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
-    router.push("/login");
+    const base = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+    await fetch(`${base}/api/auth/logout`, { method: "POST", credentials: "include" });
+    window.location.replace(`${base}/login`);
   }
 
   return (
