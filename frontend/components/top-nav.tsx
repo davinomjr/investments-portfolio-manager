@@ -33,10 +33,10 @@ export function TopNav() {
       <div className="mx-auto flex max-w-7xl items-center justify-end gap-3 px-4 py-3 md:px-10 md:py-4">
         <div className="flex shrink-0 items-center gap-2 md:gap-4">
           <nav className="flex items-center gap-1 rounded-full border border-white/15 p-1">
-            <span className="px-3 py-1.5 text-[10px] uppercase tracking-[0.3em] text-white/35 md:px-4 md:py-2">
+            <span className="hidden px-3 py-1.5 text-[10px] uppercase tracking-[0.3em] text-white/35 md:inline md:px-4 md:py-2">
               Portfolio Manager
             </span>
-            <span className="h-4 w-px bg-white/15" />
+            <span className="hidden h-4 w-px bg-white/15 md:block" />
             {ITEMS.map((item) => {
               const active = pathname === item.href;
               const pending = pendingHref === item.href && !active;
