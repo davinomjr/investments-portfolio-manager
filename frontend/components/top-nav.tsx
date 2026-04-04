@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import { useVisibility } from "@/components/visibility-context";
 
 const ITEMS = [
@@ -15,6 +16,11 @@ export function TopNav() {
   const pathname = usePathname();
   const router = useRouter();
   const { visible, toggle } = useVisibility();
+  const [pendingHref, setPendingHref] = useState<string | null>(null);
+
+  useEffect(() => {
+    setPendingHref(null);
+  }, [pathname]);
 
   async function handleLogout() {
     const base = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
@@ -35,13 +41,17 @@ export function TopNav() {
           <nav className="flex items-center gap-1 rounded-full border border-white/15 p-1">
             {ITEMS.map((item) => {
               const active = pathname === item.href;
+              const pending = pendingHref === item.href && !active;
               return (
                 <Link
                   key={item.href}
                   href={item.href}
+                  onClick={() => { if (!active) setPendingHref(item.href); }}
                   className={
                     active
                       ? "rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-[#1a1d25] md:px-4 md:py-2 md:text-sm"
+                      : pending
+                      ? "animate-pulse rounded-full bg-white/20 px-3 py-1.5 text-xs font-semibold text-white md:px-4 md:py-2 md:text-sm"
                       : "rounded-full px-3 py-1.5 text-xs font-semibold text-white/65 transition hover:bg-white/10 hover:text-white md:px-4 md:py-2 md:text-sm"
                   }
                 >
