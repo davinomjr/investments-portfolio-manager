@@ -69,9 +69,10 @@ export function TopNav() {
           </button>
           <button
             onClick={handleLogout}
-            className="hidden rounded-full border border-white/15 px-4 py-2 text-sm font-semibold text-white/50 transition hover:border-white/30 hover:text-white/80 sm:block"
+            className="rounded-full border border-white/15 px-3 py-1.5 text-xs font-semibold text-white/50 transition hover:border-white/30 hover:text-white/80 md:px-4 md:py-2 md:text-sm"
           >
-            Sign out
+            <span className="hidden sm:inline">Sign out</span>
+            <span className="sm:hidden">Exit</span>
           </button>
         </div>
       </div>
