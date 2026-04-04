@@ -24,8 +24,8 @@ export function PositionsTable({ positions }: { positions: Position[] }) {
   const { visible } = useVisibility();
 
   return (
-    <section className="rounded-[2rem] border border-white/15 bg-[#222530] p-6">
-      <div className="mb-6">
+    <section className="rounded-[2rem] border border-white/15 bg-[#222530] p-4 md:p-6">
+      <div className="mb-4 md:mb-6">
         <p className="text-xs uppercase tracking-[0.3em] text-white/55">Positions</p>
         <h2 className="mt-2 text-2xl font-semibold">Imported holdings</h2>
       </div>
@@ -34,24 +34,24 @@ export function PositionsTable({ positions }: { positions: Position[] }) {
             <thead className="text-white/50">
               <tr>
                 <th className="pb-2 pr-4">Ticker</th>
-                <th className="pb-2 pr-4">Type</th>
-                <th className="pb-2 pr-4">Quantity</th>
-                <th className="pb-2 pr-4">Avg/Close</th>
+                <th className="hidden pb-2 pr-4 sm:table-cell">Type</th>
+                <th className="pb-2 pr-4">Qty</th>
+                <th className="hidden pb-2 pr-4 sm:table-cell">Avg/Close</th>
                 <th className="pb-2 pr-4">Value</th>
               </tr>
             </thead>
             <tbody>
               {positions.map((position) => (
                 <tr key={position.ticker} className="rounded-2xl border border-white/10 bg-[#272a36]">
-                  <td className="rounded-l-2xl px-4 py-3 font-semibold">
+                  <td className="rounded-l-2xl px-3 py-2.5 font-semibold md:px-4 md:py-3">
                     <Link
                       href={`/results#${position.ticker}`}
-                      className="hover:underline hover:text-white/80 transition-colors"
+                      className="transition-colors hover:text-white/80 hover:underline"
                     >
                       {position.ticker}
                     </Link>
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="hidden px-3 py-2.5 sm:table-cell md:px-4 md:py-3">
                     <span
                       className="inline-flex rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em]"
                       style={{
@@ -63,9 +63,9 @@ export function PositionsTable({ positions }: { positions: Position[] }) {
                       {getAssetStyle(position.asset_type).label}
                     </span>
                   </td>
-                  <td className="px-4 py-3">{visible ? position.quantity : "**"}</td>
-                  <td className="px-4 py-3">{visible ? formatCurrency(position.avg_price) : "**"}</td>
-                  <td className="rounded-r-2xl px-4 py-3">{visible ? formatCurrency(position.quantity * position.avg_price) : "**"}</td>
+                  <td className="px-3 py-2.5 md:px-4 md:py-3">{visible ? position.quantity : "**"}</td>
+                  <td className="hidden px-3 py-2.5 sm:table-cell md:px-4 md:py-3">{visible ? formatCurrency(position.avg_price) : "**"}</td>
+                  <td className="rounded-r-2xl px-3 py-2.5 md:px-4 md:py-3">{visible ? formatCurrency(position.quantity * position.avg_price) : "**"}</td>
                 </tr>
               ))}
             </tbody>

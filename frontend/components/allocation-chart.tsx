@@ -19,20 +19,20 @@ export function AllocationChart({ allocations }: { allocations: Allocation[] }) 
   }));
 
   return (
-    <section className="rounded-[2rem] border border-white/15 bg-[#222530] p-6">
-      <div className="mb-6">
+    <section className="overflow-hidden rounded-[2rem] border border-white/15 bg-[#222530] p-4 md:p-6">
+      <div className="mb-4 md:mb-6">
         <p className="text-xs uppercase tracking-[0.3em] text-white/55">Allocation</p>
         <h2 className="mt-2 text-2xl font-semibold">Top portfolio weights</h2>
       </div>
-      <div className="h-72">
+      <div className="h-56 sm:h-64 md:h-72">
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
             <Pie
               data={data}
               dataKey="value"
               nameKey="name"
-              innerRadius={62}
-              outerRadius={108}
+              innerRadius="40%"
+              outerRadius="70%"
               paddingAngle={2}
             >
               {data.map((entry, index) => (
