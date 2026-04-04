@@ -225,3 +225,93 @@ The only GitHub Actions workflow (`.github/workflows/summary.yml`) auto-summariz
 - Feature branches follow the pattern `claude/<short-description>-<id>` or `feature/<short-description>`.
 - Commit messages are imperative and lowercase (e.g. `add monte carlo endpoint`, `fix: sentiment ttl check`).
 - Keep commits focused; one logical change per commit.
+
+---
+
+## Production Deployment (Railway)
+
+### Services
+
+Two Railway services in one project, both deploying from the `main` branch of this repo.
+
+| Service | Role | Dockerfile |
+|---------|------|------------|
+| `investments-portfolio-manager` | Backend + Worker | `Dockerfile` (root) |
+| `frontend` | Next.js frontend | `frontend/Dockerfile` |
+
+**Critical**: the frontend service must have its **Root Directory set to `frontend/`** in Railway settings. Without this, Railway uses the root `railway.toml` and builds the backend binary instead.
+
+### Backend env vars (Railway)
+
+```
+DATABASE_URL=/data/portfolio.db
+ADDR=         # do NOT set — backend reads Railway's injected PORT via railwayAddr() in config.go
+AUTH_PASSWORD=<bcrypt hash>
+AUTH_JWT_SECRET=<secret>
+IBKR_FLEX_TOKEN=<token>
+IBKR_FLEX_QUERY_ID=<query id>
+CORS_ORIGINS=https://davinomjr.com,https://frontend-production-1e40.up.railway.app
+HEADLESS=true
+```
+
+The backend binds to Railway's injected `PORT` env var via `railwayAddr()` in `backend/internal/config/config.go`. Never hardcode `ADDR` — it breaks the healthcheck.
+
+### Frontend env vars (Railway)
+
+```
+INTERNAL_API_BASE_URL=http://investments-portfolio-manager.railway.internal:8080
+NEXT_PUBLIC_API_BASE_URL=/api
+NEXT_PUBLIC_BASE_PATH=/investments
+NODE_ENV=production
+```
+
+**`NEXT_PUBLIC_*` vars are baked in at build time.** The `frontend/Dockerfile` declares `ARG NEXT_PUBLIC_BASE_PATH` so Railway passes it during `npm run build`. After changing any `NEXT_PUBLIC_*` var, trigger a full redeploy — a restart alone is not enough.
+
+### SQLite persistence
+
+A Railway Volume is mounted at `/data` on the backend service. Without it, the database is wiped on every redeploy.
+
+### Custom domain: davinomjr.com/investments
+
+Traffic flow:
+```
+Browser → davinomjr.com/investments/*
+  → Cloudflare Worker (investments-proxy)
+  → frontend-production-1e40.up.railway.app/investments/*
+  → Next.js middleware proxies /api/* to backend via private network
+  → Backend at investments-portfolio-manager.railway.internal:8080
+```
+
+Cloudflare also has a `www → non-www` redirect rule so `www.davinomjr.com` redirects to `davinomjr.com`.
+
+### basePath pattern
+
+The frontend is deployed with `basePath: "/investments"` (set via `NEXT_PUBLIC_BASE_PATH` in `next.config.ts`).
+
+**Any client-side `fetch()` call must prefix the path with `process.env.NEXT_PUBLIC_BASE_PATH ?? ""`.**
+Without this, the browser resolves `/api/...` against the domain root and hits GitHub Pages instead of Next.js, returning 405.
+
+Files with this pattern applied:
+- `frontend/app/login/page.tsx`
+- `frontend/components/top-nav.tsx`
+- `frontend/components/upload-panel.tsx`
+- `frontend/lib/api.ts`
+
+Server-side fetches (in `lib/api.ts` `serverFetch`) use `INTERNAL_API_BASE_URL` directly — no basePath prefix needed there.
+
+### Generating bcrypt passwords
+
+Always use Go:
+```bash
+cat > /tmp/hashpw.go << 'EOF'
+package main
+import ("fmt"; "os"; "golang.org/x/crypto/bcrypt")
+func main() { h, _ := bcrypt.GenerateFromPassword([]byte(os.Args[1]), 12); fmt.Println(string(h)) }
+EOF
+go run /tmp/hashpw.go 'yourpassword'
+```
+Paste the output into Railway Variables **without quotes**.
+
+### What does NOT work in production
+
+- **B3 browser sync** — requires an interactive Playwright session with a real browser. Only works locally. IBKR Flex sync and manual file upload work fine in production.
