@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import type { ImportJobResponse } from "@/lib/api";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "/api";
+const API_BASE = (process.env.NEXT_PUBLIC_BASE_PATH ?? "") + (process.env.NEXT_PUBLIC_API_BASE_URL ?? "/api");
 
 function formatTimestamp(iso: string): string {
   try {
