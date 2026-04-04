@@ -21,7 +21,7 @@ export default function LoginPage() {
         credentials: "include",
       });
       if (res.ok) {
-        router.push("/");
+        window.location.replace("/");
       } else {
         const data = await res.json().catch(() => ({}));
         setError(data.detail ?? "Invalid password.");
