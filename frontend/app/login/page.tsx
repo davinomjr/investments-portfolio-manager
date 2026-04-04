@@ -22,16 +22,16 @@ export default function LoginPage() {
         credentials: "include",
       });
       if (res.ok) {
+        // Keep loading=true — page navigates away, no need to reset
         window.location.replace(`${base}/`);
-      } else {
-        const data = await res.json().catch(() => ({}));
-        setError(data.detail ?? "Invalid password.");
+        return;
       }
+      const data = await res.json().catch(() => ({}));
+      setError(data.detail ?? "Invalid password.");
     } catch {
       setError("Network error. Please try again.");
-    } finally {
-      setLoading(false);
     }
+    setLoading(false);
   }
 
   return (
