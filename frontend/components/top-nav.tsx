@@ -4,12 +4,13 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useVisibility } from "@/components/visibility-context";
+import { Home, ChartNoAxesCombined, Building2, ChartCandlestick } from "lucide-react";
 
 const ITEMS = [
-  { href: "/", label: "Portfolio" },
-  { href: "/results", label: "Stocks" },
-  { href: "/fiis", label: "FIIs" },
-  { href: "/simulator", label: "Simulator" },
+  { href: "/", label: "Portfolio", Icon: Home },
+  { href: "/results", label: "Stocks", Icon: ChartNoAxesCombined },
+  { href: "/fiis", label: "FIIs", Icon: Building2 },
+  { href: "/simulator", label: "Simulator", Icon: ChartCandlestick },
 ] as const;
 
 export function TopNav() {
@@ -58,16 +59,17 @@ export function TopNav() {
                 <Link
                   key={item.href}
                   href={item.href}
+                  title={item.label}
                   onClick={() => { if (!active) setPendingHref(item.href); }}
                   className={
                     active
-                      ? "rounded-full bg-white px-4 py-2 text-sm font-semibold text-[#1a1d25]"
+                      ? "rounded-full bg-white p-2.5 text-[#1a1d25]"
                       : pending
-                      ? "animate-pulse rounded-full bg-white/20 px-4 py-2 text-sm font-semibold text-white"
-                      : "rounded-full px-4 py-2 text-sm font-semibold text-white/65 transition hover:bg-white/10 hover:text-white"
+                      ? "animate-pulse rounded-full bg-white/20 p-2.5 text-white"
+                      : "rounded-full p-2.5 text-white/50 transition hover:bg-white/10 hover:text-white"
                   }
                 >
-                  {item.label}
+                  <item.Icon size={18} strokeWidth={1.75} />
                 </Link>
               );
             })}
