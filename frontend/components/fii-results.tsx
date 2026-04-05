@@ -39,7 +39,7 @@ export function FIIResults({ results }: { results: FIIResultsResponse }) {
           <h2 className="mt-2 text-2xl font-semibold">FII metrics for held positions</h2>
         </div>
         <p className="max-w-xl text-sm leading-6 text-white/60">
-          Key income and valuation metrics from Fundamentus for each FII in your portfolio.
+          Key income and valuation metrics from Status Invest, with Fundamentus used when Status Invest is unavailable.
         </p>
       </div>
 

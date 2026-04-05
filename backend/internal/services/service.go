@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"io"
 	"log"
 	"math"
@@ -914,8 +915,8 @@ func scrapeFundamentusVolume(html, label string) *float64 {
 	return &v
 }
 
-// scrapeStatusInvestFII fetches FII metrics from statusinvest.com.br.
-// Fundamentus is no longer used because its data for many FIIs is stale.
+// scrapeStatusInvestFII fetches primary FII metrics from statusinvest.com.br.
+// Fundamentus remains the fallback when Status Invest is unavailable.
 func (s *Service) scrapeStatusInvestFII(ctx context.Context, ticker string) *fiiScrapedData {
 	url := "https://statusinvest.com.br/fundos-imobiliarios/" + strings.ToLower(ticker)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
@@ -931,23 +932,23 @@ func (s *Service) scrapeStatusInvestFII(ctx context.Context, ticker string) *fii
 		return nil
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("statusinvest fii: unexpected status %s for %s", resp.Status, ticker)
+		return nil
+	}
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		log.Printf("statusinvest fii: read %s: %v", ticker, err)
 		return nil
 	}
 	html := string(body)
+	text := normalizeStatusInvestText(html)
 	out := &fiiScrapedData{}
-	// DY (12M): anchored on the div title attribute that uniquely identifies the section.
-	out.DividendYield = scrapeStatusInvestField(html, `title="Dividend Yield com base nos`, true)
-	// P/VP: the h3 contains exactly ">P/VP<".
-	out.PVP = scrapeStatusInvestField(html, `>P/VP<`, false)
-	// Last dividend per unit: inside the #dy-info card.
-	out.DividendPerUnit = scrapeStatusInvestField(html, `id="dy-info"`, false)
-	// Average daily liquidity (volume uses dots as thousands separators).
-	out.AvgDailyVolume = scrapeStatusInvestLiquidity(html)
-	// Vacancy rate; returns nil when the page shows "-".
-	out.VacancyRate = scrapeStatusInvestVacancy(html)
+	out.DividendYield = scrapeStatusInvestTextField(text, "Dividend Yield", true)
+	out.PVP = scrapeStatusInvestTextField(text, "P/VP", false)
+	out.DividendPerUnit = scrapeStatusInvestCurrencyField(text, "Ultimo rendimento")
+	out.AvgDailyVolume = scrapeStatusInvestCurrencyField(text, "Liquidez media diaria")
+	out.VacancyRate = scrapeStatusInvestTextField(text, "Vacancia", true)
 	// FFO Yield and Cap Rate are not published on Status Invest.
 	if out.DividendYield == nil && out.PVP == nil {
 		return nil
@@ -955,107 +956,69 @@ func (s *Service) scrapeStatusInvestFII(ctx context.Context, ticker string) *fii
 	return out
 }
 
-// scrapeStatusInvestField finds anchor in html and extracts the text content
-// of the first <strong class="value..."> element that follows it.
-func scrapeStatusInvestField(html, anchor string, isPercent bool) *float64 {
-	idx := strings.Index(html, anchor)
+func normalizeStatusInvestText(rawHTML string) string {
+	withoutScripts := regexp.MustCompile(`(?is)<script[^>]*>.*?</script>`).ReplaceAllString(rawHTML, " ")
+	withoutStyles := regexp.MustCompile(`(?is)<style[^>]*>.*?</style>`).ReplaceAllString(withoutScripts, " ")
+	textOnly := regexp.MustCompile(`(?s)<[^>]+>`).ReplaceAllString(withoutStyles, " ")
+	textOnly = html.UnescapeString(textOnly)
+	textOnly = strings.ToLower(textOnly)
+	textOnly = strings.NewReplacer(
+		"á", "a",
+		"à", "a",
+		"ã", "a",
+		"â", "a",
+		"é", "e",
+		"ê", "e",
+		"í", "i",
+		"ó", "o",
+		"ô", "o",
+		"õ", "o",
+		"ú", "u",
+		"ç", "c",
+	).Replace(textOnly)
+	return strings.Join(strings.Fields(textOnly), " ")
+}
+
+func scrapeStatusInvestTextField(text, label string, isPercent bool) *float64 {
+	idx := strings.Index(text, strings.ToLower(label))
 	if idx < 0 {
 		return nil
 	}
-	sub := html[idx:]
-	strongIdx := strings.Index(sub, `<strong class="value`)
-	if strongIdx < 0 {
-		return nil
-	}
-	sub = sub[strongIdx:]
-	closeTag := strings.IndexByte(sub, '>')
-	if closeTag < 0 {
-		return nil
-	}
-	sub = sub[closeTag+1:]
-	endIdx := strings.IndexByte(sub, '<')
-	if endIdx < 0 {
-		return nil
-	}
-	raw := strings.TrimSpace(sub[:endIdx])
-	if raw == "" || raw == "-" {
-		return nil
-	}
+	sub := text[idx:]
+	pattern := `(-|[0-9]{1,3}(?:\.[0-9]{3})*(?:,[0-9]+)?|[0-9]+(?:,[0-9]+)?)`
 	if isPercent {
-		raw = strings.ReplaceAll(raw, "%", "")
+		pattern += `\s*%`
 	}
-	raw = strings.ReplaceAll(raw, ",", ".")
-	v, err := strconv.ParseFloat(strings.TrimSpace(raw), 64)
-	if err != nil {
+	match := regexp.MustCompile(pattern).FindStringSubmatch(sub)
+	if len(match) < 2 || match[1] == "-" {
 		return nil
 	}
-	return &v
+	return parseBrazilianNumber(match[1])
 }
 
-// scrapeStatusInvestLiquidity extracts the average daily liquidity value.
-// Status Invest formats this with dots as thousands separators (e.g. "1.563.463,48").
-func scrapeStatusInvestLiquidity(html string) *float64 {
-	idx := strings.Index(html, "Liquidez média diária")
+func scrapeStatusInvestCurrencyField(text, label string) *float64 {
+	idx := strings.Index(text, strings.ToLower(label))
 	if idx < 0 {
 		return nil
 	}
-	sub := html[idx:]
-	strongIdx := strings.Index(sub, `<strong class="value`)
-	if strongIdx < 0 {
+	sub := text[idx:]
+	match := regexp.MustCompile(`r\$\s*(-|[0-9]{1,3}(?:\.[0-9]{3})*(?:,[0-9]+)?|[0-9]+(?:,[0-9]+)?)`).FindStringSubmatch(sub)
+	if len(match) < 2 || match[1] == "-" {
 		return nil
 	}
-	sub = sub[strongIdx:]
-	closeTag := strings.IndexByte(sub, '>')
-	if closeTag < 0 {
-		return nil
-	}
-	sub = sub[closeTag+1:]
-	endIdx := strings.IndexByte(sub, '<')
-	if endIdx < 0 {
-		return nil
-	}
-	raw := strings.TrimSpace(sub[:endIdx])
-	if raw == "" || raw == "-" {
-		return nil
-	}
-	// Dots are thousands separators; comma is decimal separator.
-	raw = strings.ReplaceAll(raw, ".", "")
-	raw = strings.ReplaceAll(raw, ",", ".")
-	v, err := strconv.ParseFloat(strings.TrimSpace(raw), 64)
-	if err != nil {
-		return nil
-	}
-	return &v
+	return parseBrazilianNumber(match[1])
 }
 
-// scrapeStatusInvestVacancy extracts the vacancy rate; returns nil when "-".
-func scrapeStatusInvestVacancy(html string) *float64 {
-	idx := strings.Index(html, `sub-value">Vacância<`)
-	if idx < 0 {
-		return nil
-	}
-	sub := html[idx:]
-	strongIdx := strings.Index(sub, `<strong class="value`)
-	if strongIdx < 0 {
-		return nil
-	}
-	sub = sub[strongIdx:]
-	closeTag := strings.IndexByte(sub, '>')
-	if closeTag < 0 {
-		return nil
-	}
-	sub = sub[closeTag+1:]
-	endIdx := strings.IndexByte(sub, '<')
-	if endIdx < 0 {
-		return nil
-	}
-	raw := strings.TrimSpace(sub[:endIdx])
+func parseBrazilianNumber(raw string) *float64 {
+	raw = strings.TrimSpace(raw)
 	if raw == "" || raw == "-" {
 		return nil
 	}
-	raw = strings.ReplaceAll(raw, "%", "")
-	raw = strings.ReplaceAll(raw, ",", ".")
-	v, err := strconv.ParseFloat(strings.TrimSpace(raw), 64)
+	if strings.Contains(raw, ",") {
+		raw = strings.ReplaceAll(raw, ".", "")
+		raw = strings.ReplaceAll(raw, ",", ".")
+	}
+	v, err := strconv.ParseFloat(raw, 64)
 	if err != nil {
 		return nil
 	}
