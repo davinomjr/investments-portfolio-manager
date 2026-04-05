@@ -43,7 +43,7 @@ export function TopNav() {
   }
 
   return (
-    <header className="sticky top-0 z-20 border-b border-white/15 bg-[#1a1d25]/90 backdrop-blur">
+    <header className="sticky top-0 z-20 bg-[#1a1d25] md:border-b md:border-white/15 md:bg-[#1a1d25]/90 md:backdrop-blur">
       <div className="mx-auto flex max-w-7xl items-center justify-end gap-3 px-4 py-3 md:px-10 md:py-4">
         <div className="flex shrink-0 items-center gap-2 md:gap-4">
           {/* Nav pills — hidden on mobile, bottom nav used instead */}
