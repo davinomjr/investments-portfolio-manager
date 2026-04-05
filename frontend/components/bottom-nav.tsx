@@ -62,16 +62,16 @@ export function BottomNav() {
               key={item.href}
               href={item.href}
               onClick={() => { if (!active) setPendingHref(item.href); }}
-              className={`flex flex-1 flex-col items-center gap-1 py-3 text-[10px] font-semibold uppercase tracking-wide transition ${
+              aria-label={item.label}
+              className={`flex flex-1 items-center justify-center py-4 transition ${
                 active
                   ? "text-white"
                   : pending
                   ? "animate-pulse text-white/60"
-                  : "text-white/40 hover:text-white/70"
+                  : "text-white/35 hover:text-white/70"
               }`}
             >
-              <span className={active ? "text-white" : ""}>{item.icon}</span>
-              {item.label}
+              {item.icon}
             </Link>
           );
         })}
