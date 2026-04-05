@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { TopNav } from "@/components/top-nav";
+import { BottomNav } from "@/components/bottom-nav";
 import { VisibilityProvider } from "@/components/visibility-context";
 import "./globals.css";
 
@@ -25,7 +26,8 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       <body>
         <VisibilityProvider>
           <TopNav />
-          {children}
+          <div className="pb-20 md:pb-0">{children}</div>
+          <BottomNav />
         </VisibilityProvider>
       </body>
     </html>

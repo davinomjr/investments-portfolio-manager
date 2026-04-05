@@ -45,11 +45,12 @@ export function TopNav() {
     <header className="sticky top-0 z-20 border-b border-white/15 bg-[#1a1d25]/90 backdrop-blur">
       <div className="mx-auto flex max-w-7xl items-center justify-end gap-3 px-4 py-3 md:px-10 md:py-4">
         <div className="flex shrink-0 items-center gap-2 md:gap-4">
-          <nav className="flex items-center gap-1 rounded-full border border-white/15 p-1">
-            <span className="hidden px-3 py-1.5 text-[10px] uppercase tracking-[0.3em] text-white/35 md:inline md:px-4 md:py-2">
+          {/* Nav pills — hidden on mobile, bottom nav used instead */}
+          <nav className="hidden md:flex items-center gap-1 rounded-full border border-white/15 p-1">
+            <span className="px-4 py-2 text-[10px] uppercase tracking-[0.3em] text-white/35">
               Portfolio Manager
             </span>
-            <span className="hidden h-4 w-px bg-white/15 md:block" />
+            <span className="h-4 w-px bg-white/15" />
             {ITEMS.map((item) => {
               const active = pathname === item.href;
               const pending = pendingHref === item.href && !active;
@@ -60,10 +61,10 @@ export function TopNav() {
                   onClick={() => { if (!active) setPendingHref(item.href); }}
                   className={
                     active
-                      ? "rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-[#1a1d25] md:px-4 md:py-2 md:text-sm"
+                      ? "rounded-full bg-white px-4 py-2 text-sm font-semibold text-[#1a1d25]"
                       : pending
-                      ? "animate-pulse rounded-full bg-white/20 px-3 py-1.5 text-xs font-semibold text-white md:px-4 md:py-2 md:text-sm"
-                      : "rounded-full px-3 py-1.5 text-xs font-semibold text-white/65 transition hover:bg-white/10 hover:text-white md:px-4 md:py-2 md:text-sm"
+                      ? "animate-pulse rounded-full bg-white/20 px-4 py-2 text-sm font-semibold text-white"
+                      : "rounded-full px-4 py-2 text-sm font-semibold text-white/65 transition hover:bg-white/10 hover:text-white"
                   }
                 >
                   {item.label}
