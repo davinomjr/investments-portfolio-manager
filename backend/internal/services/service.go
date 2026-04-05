@@ -1178,6 +1178,21 @@ func scrapeFundsExplorerAbbrevCurrency(text, start, end string) *float64 {
 	return &v
 }
 
+func fillFIIMissingSupplementalFields(dst, src *fiiScrapedData) {
+	if dst == nil || src == nil {
+		return
+	}
+	if dst.FFOYield == nil {
+		dst.FFOYield = src.FFOYield
+	}
+	if dst.CapRate == nil {
+		dst.CapRate = src.CapRate
+	}
+	if dst.VacancyRate == nil {
+		dst.VacancyRate = src.VacancyRate
+	}
+}
+
 func (s *Service) fetchFIIMetrics(ctx context.Context, tickers []string) map[string]*fiiScrapedData {
 	out := make(map[string]*fiiScrapedData, len(tickers))
 	if len(tickers) == 0 {
@@ -1190,9 +1205,13 @@ func (s *Service) fetchFIIMetrics(ctx context.Context, tickers []string) map[str
 		go func(t string) {
 			defer wg.Done()
 			data := s.scrapeFundsExplorerFII(ctx, t)
+			fundamentus := s.scrapeFundamentusFII(ctx, t)
+			if data != nil {
+				fillFIIMissingSupplementalFields(data, fundamentus)
+			}
 			if data == nil {
 				log.Printf("fundsexplorer fii: no data for %s, falling back to Fundamentus", t)
-				data = s.scrapeFundamentusFII(ctx, t)
+				data = fundamentus
 			}
 			if data != nil {
 				mu.Lock()
