@@ -951,9 +951,45 @@ func (s *Service) scrapeStatusInvestFII(ctx context.Context, ticker string) *fii
 	out.VacancyRate = scrapeStatusInvestVacancy(text)
 	// FFO Yield and Cap Rate are not published on Status Invest.
 	if out.DividendYield == nil && out.PVP == nil {
+		logStatusInvestNoData(ticker, resp, text, html)
 		return nil
 	}
 	return out
+}
+
+func logStatusInvestNoData(ticker string, resp *http.Response, normalizedText, rawHTML string) {
+	snippet := normalizedText
+	if len(snippet) > 240 {
+		snippet = snippet[:240]
+	}
+	flags := []string{}
+	for _, marker := range []string{
+		"cloudflare",
+		"attention required",
+		"captcha",
+		"access denied",
+		"forbidden",
+		"blocked",
+		"bot",
+		"challenge",
+		"just a moment",
+	} {
+		if strings.Contains(normalizedText, marker) || strings.Contains(strings.ToLower(rawHTML), marker) {
+			flags = append(flags, marker)
+		}
+	}
+	log.Printf(
+		"statusinvest fii: no parsable data for %s status=%s final_url=%s has_dividend_yield=%t has_pvp=%t has_ultimo_rendimento=%t has_liquidez=%t flags=%v snippet=%q",
+		ticker,
+		resp.Status,
+		resp.Request.URL.String(),
+		strings.Contains(normalizedText, "dividend yield"),
+		strings.Contains(normalizedText, "p/vp"),
+		strings.Contains(normalizedText, "ultimo rendimento"),
+		strings.Contains(normalizedText, "liquidez media diaria"),
+		flags,
+		snippet,
+	)
 }
 
 func normalizeStatusInvestText(rawHTML string) string {
