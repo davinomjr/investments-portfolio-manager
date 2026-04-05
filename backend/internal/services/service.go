@@ -1074,6 +1074,11 @@ func (s *Service) fetchFIIMetrics(ctx context.Context, tickers []string) map[str
 		go func(t string) {
 			defer wg.Done()
 			data := s.scrapeStatusInvestFII(ctx, t)
+			if data == nil {
+				// Status Invest may be geo-blocked in production; fall back to Fundamentus.
+				log.Printf("statusinvest fii: no data for %s, falling back to Fundamentus", t)
+				data = s.scrapeFundamentusFII(ctx, t)
+			}
 			if data != nil {
 				mu.Lock()
 				out[strings.ToUpper(t)] = data
