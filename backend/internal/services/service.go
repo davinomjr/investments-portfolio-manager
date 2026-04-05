@@ -853,8 +853,11 @@ func (s *Service) scrapeFundamentusFII(ctx context.Context, ticker string) *fiiS
 func scrapeFundamentusField(html, label string, isPercent bool) *float64 {
 	// Anchor on the label inside its txt span to avoid matching tooltip title attributes
 	// which may also contain the label text (e.g. "FFO Yield" appears in its own tooltip).
+	// Use LastIndex because some fields (e.g. "Div. Yield", "P/VP") appear in both the
+	// general stock section and the FII-specific section of detalhes.php. The last
+	// occurrence is always the FII section, which carries the correct trailing 12M values.
 	anchor := `<span class="txt">` + label + `</span>`
-	idx := strings.Index(html, anchor)
+	idx := strings.LastIndex(html, anchor)
 	if idx < 0 {
 		return nil
 	}
@@ -882,9 +885,11 @@ func scrapeFundamentusField(html, label string, isPercent bool) *float64 {
 
 // scrapeFundamentusVolume scrapes a volume/currency field where dots are
 // thousands separators (e.g. "6.100.890") rather than decimal points.
+// Uses LastIndex for the same reason as scrapeFundamentusField: some labels
+// appear in both the stock and FII sections; the last occurrence is the FII one.
 func scrapeFundamentusVolume(html, label string) *float64 {
 	anchor := `<span class="txt">` + label + `</span>`
-	idx := strings.Index(html, anchor)
+	idx := strings.LastIndex(html, anchor)
 	if idx < 0 {
 		return nil
 	}
