@@ -221,39 +221,44 @@ func TestScrapeStatusInvestFIIParsesCurrentTextLayout(t *testing.T) {
 	<html>
 		<body>
 			<h3>Dividend Yield</h3>
-			<p>Indicador utilizado para relacionar os proventos pagos pelo FII.</p>
-			<strong>8,45 %</strong>
-			<span>Ultimos 12 meses R$ 13,2000</span>
+			<p>Indicador utilizado para relacionar os proventos pagos pelo FII. Observacao: calculado entre 04/04/2025 e 04/04/2026.</p>
+			<strong>11,05 %</strong>
+			<span>Ultimos 12 meses R$ 9,6000</span>
+			<h3>Valorizacao (12m)</h3>
 
 			<h3>P/VP</h3>
 			<strong>0,94</strong>
+			<div>Valor de mercado R$ 514.919.196</div>
 
 			<div>Ultimo rendimento</div>
 			<strong>R$ 1,1000</strong>
+			<div>Proximo rendimento R$ -</div>
 
 			<div>Liq. med. diaria Liquidez media diaria</div>
 			<strong>R$ 12.370.771,43</strong>
+			<div>Participacao no IFIX 0,298 %</div>
 
 			<div>Vacancia</div>
 			<strong>3,21 %</strong>
+			<div>Numero de imoveis 12</div>
 		</body>
 	</html>`
 
 	text := normalizeStatusInvestText(sampleHTML)
 
-	assertFloatPtr(t, scrapeStatusInvestTextField(text, "Dividend Yield", true), 8.45, "dividend yield")
-	assertFloatPtr(t, scrapeStatusInvestTextField(text, "P/VP", false), 0.94, "p/vp")
-	assertFloatPtr(t, scrapeStatusInvestCurrencyField(text, "Ultimo rendimento"), 1.1, "dividend per unit")
-	assertFloatPtr(t, scrapeStatusInvestCurrencyField(text, "Liquidez media diaria"), 12370771.43, "avg daily volume")
-	assertFloatPtr(t, scrapeStatusInvestTextField(text, "Vacancia", true), 3.21, "vacancy")
+	assertFloatPtr(t, scrapeStatusInvestDividendYield(text), 11.05, "dividend yield")
+	assertFloatPtr(t, scrapeStatusInvestPVP(text), 0.94, "p/vp")
+	assertFloatPtr(t, scrapeStatusInvestLastDividend(text), 1.1, "dividend per unit")
+	assertFloatPtr(t, scrapeStatusInvestLiquidity(text), 12370771.43, "avg daily volume")
+	assertFloatPtr(t, scrapeStatusInvestVacancy(text), 3.21, "vacancy")
 }
 
 func TestScrapeStatusInvestTextFieldReturnsNilForMissingValue(t *testing.T) {
-	const sampleHTML = `<div>Vacancia</div><strong>-</strong>`
+	const sampleHTML = `<div>Vacancia</div><strong>-</strong><div>Numero de imoveis 12</div>`
 
 	text := normalizeStatusInvestText(sampleHTML)
 
-	if got := scrapeStatusInvestTextField(text, "Vacancia", true); got != nil {
+	if got := scrapeStatusInvestVacancy(text); got != nil {
 		t.Fatalf("expected nil vacancy, got %v", *got)
 	}
 }

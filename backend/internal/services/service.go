@@ -944,11 +944,11 @@ func (s *Service) scrapeStatusInvestFII(ctx context.Context, ticker string) *fii
 	html := string(body)
 	text := normalizeStatusInvestText(html)
 	out := &fiiScrapedData{}
-	out.DividendYield = scrapeStatusInvestTextField(text, "Dividend Yield", true)
-	out.PVP = scrapeStatusInvestTextField(text, "P/VP", false)
-	out.DividendPerUnit = scrapeStatusInvestCurrencyField(text, "Ultimo rendimento")
-	out.AvgDailyVolume = scrapeStatusInvestCurrencyField(text, "Liquidez media diaria")
-	out.VacancyRate = scrapeStatusInvestTextField(text, "Vacancia", true)
+	out.DividendYield = scrapeStatusInvestDividendYield(text)
+	out.PVP = scrapeStatusInvestPVP(text)
+	out.DividendPerUnit = scrapeStatusInvestLastDividend(text)
+	out.AvgDailyVolume = scrapeStatusInvestLiquidity(text)
+	out.VacancyRate = scrapeStatusInvestVacancy(text)
 	// FFO Yield and Cap Rate are not published on Status Invest.
 	if out.DividendYield == nil && out.PVP == nil {
 		return nil
@@ -979,30 +979,65 @@ func normalizeStatusInvestText(rawHTML string) string {
 	return strings.Join(strings.Fields(textOnly), " ")
 }
 
-func scrapeStatusInvestTextField(text, label string, isPercent bool) *float64 {
-	idx := strings.Index(text, strings.ToLower(label))
-	if idx < 0 {
+func scrapeStatusInvestDividendYield(text string) *float64 {
+	section := statusInvestSection(text, "dividend yield", "valorizacao (12m)")
+	return findLastPercent(section)
+}
+
+func scrapeStatusInvestPVP(text string) *float64 {
+	section := statusInvestSection(text, "p/vp", "valor em caixa")
+	return findFirstNumber(section)
+}
+
+func scrapeStatusInvestLastDividend(text string) *float64 {
+	section := statusInvestSection(text, "ultimo rendimento", "proximo rendimento")
+	return findFirstCurrency(section)
+}
+
+func scrapeStatusInvestLiquidity(text string) *float64 {
+	section := statusInvestSection(text, "liquidez media diaria", "participacao no ifix")
+	return findFirstCurrency(section)
+}
+
+func scrapeStatusInvestVacancy(text string) *float64 {
+	section := statusInvestSection(text, "vacancia", "numero de imoveis")
+	if section == "" {
+		section = statusInvestSection(text, "vacancia", "gestao")
+	}
+	return findLastPercent(section)
+}
+
+func statusInvestSection(text, start, end string) string {
+	startIdx := strings.Index(text, start)
+	if startIdx < 0 {
+		return ""
+	}
+	sub := text[startIdx:]
+	endIdx := strings.Index(sub, end)
+	if endIdx < 0 {
+		return sub
+	}
+	return sub[:endIdx]
+}
+
+func findLastPercent(text string) *float64 {
+	matches := regexp.MustCompile(`([0-9]{1,3}(?:\.[0-9]{3})*(?:,[0-9]+)?|[0-9]+(?:,[0-9]+)?)\s*%`).FindAllStringSubmatch(text, -1)
+	if len(matches) == 0 {
 		return nil
 	}
-	sub := text[idx:]
-	pattern := `(-|[0-9]{1,3}(?:\.[0-9]{3})*(?:,[0-9]+)?|[0-9]+(?:,[0-9]+)?)`
-	if isPercent {
-		pattern += `\s*%`
-	}
-	match := regexp.MustCompile(pattern).FindStringSubmatch(sub)
+	return parseBrazilianNumber(matches[len(matches)-1][1])
+}
+
+func findFirstNumber(text string) *float64 {
+	match := regexp.MustCompile(`(-|[0-9]{1,3}(?:\.[0-9]{3})*(?:,[0-9]+)?|[0-9]+(?:,[0-9]+)?)`).FindStringSubmatch(text)
 	if len(match) < 2 || match[1] == "-" {
 		return nil
 	}
 	return parseBrazilianNumber(match[1])
 }
 
-func scrapeStatusInvestCurrencyField(text, label string) *float64 {
-	idx := strings.Index(text, strings.ToLower(label))
-	if idx < 0 {
-		return nil
-	}
-	sub := text[idx:]
-	match := regexp.MustCompile(`r\$\s*(-|[0-9]{1,3}(?:\.[0-9]{3})*(?:,[0-9]+)?|[0-9]+(?:,[0-9]+)?)`).FindStringSubmatch(sub)
+func findFirstCurrency(text string) *float64 {
+	match := regexp.MustCompile(`r\$\s*(-|[0-9]{1,3}(?:\.[0-9]{3})*(?:,[0-9]+)?|[0-9]+(?:,[0-9]+)?)`).FindStringSubmatch(text)
 	if len(match) < 2 || match[1] == "-" {
 		return nil
 	}
