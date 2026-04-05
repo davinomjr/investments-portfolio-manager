@@ -43,9 +43,9 @@ export function TopNav() {
   }
 
   return (
-    <header className="sticky top-0 z-20 bg-[#1a1d25] md:border-b md:border-white/15 md:bg-[#1a1d25]/90 md:backdrop-blur">
+    <header className="fixed w-full top-0 z-20 pointer-events-none md:sticky md:border-b md:border-white/15 md:bg-[#1a1d25]/90 md:backdrop-blur md:pointer-events-auto">
       <div className="mx-auto flex max-w-7xl items-center justify-end gap-3 px-4 py-3 md:px-10 md:py-4">
-        <div className="flex shrink-0 items-center gap-2 md:gap-4">
+        <div className="flex shrink-0 items-center gap-2 md:gap-4 pointer-events-auto md:pointer-events-auto">
           {/* Nav pills — hidden on mobile, bottom nav used instead */}
           <nav className="hidden md:flex items-center gap-1 rounded-full border border-white/15 p-1">
             <span className="px-4 py-2 text-[10px] uppercase tracking-[0.3em] text-white/35">
