@@ -52,7 +52,7 @@ export function BottomNav() {
   }, [pathname]);
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-20 border-t border-white/15 bg-[#1a1d25]/95 backdrop-blur md:hidden">
+    <nav className="fixed bottom-0 left-0 right-0 z-20 rounded-t-2xl border-t border-white/15 bg-[#1a1d25]/95 backdrop-blur md:hidden">
       <div className="flex items-stretch" style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
         {ITEMS.map((item) => {
           const active = pathname === item.href;
