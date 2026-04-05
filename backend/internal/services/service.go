@@ -914,6 +914,154 @@ func scrapeFundamentusVolume(html, label string) *float64 {
 	return &v
 }
 
+// scrapeStatusInvestFII fetches FII metrics from statusinvest.com.br.
+// Fundamentus is no longer used because its data for many FIIs is stale.
+func (s *Service) scrapeStatusInvestFII(ctx context.Context, ticker string) *fiiScrapedData {
+	url := "https://statusinvest.com.br/fundos-imobiliarios/" + strings.ToLower(ticker)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		log.Printf("statusinvest fii: build request %s: %v", ticker, err)
+		return nil
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+	req.Header.Set("Accept-Language", "pt-BR,pt;q=0.9")
+	resp, err := s.Client.Do(req)
+	if err != nil {
+		log.Printf("statusinvest fii: request %s: %v", ticker, err)
+		return nil
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("statusinvest fii: read %s: %v", ticker, err)
+		return nil
+	}
+	html := string(body)
+	out := &fiiScrapedData{}
+	// DY (12M): anchored on the div title attribute that uniquely identifies the section.
+	out.DividendYield = scrapeStatusInvestField(html, `title="Dividend Yield com base nos`, true)
+	// P/VP: the h3 contains exactly ">P/VP<".
+	out.PVP = scrapeStatusInvestField(html, `>P/VP<`, false)
+	// Last dividend per unit: inside the #dy-info card.
+	out.DividendPerUnit = scrapeStatusInvestField(html, `id="dy-info"`, false)
+	// Average daily liquidity (volume uses dots as thousands separators).
+	out.AvgDailyVolume = scrapeStatusInvestLiquidity(html)
+	// Vacancy rate; returns nil when the page shows "-".
+	out.VacancyRate = scrapeStatusInvestVacancy(html)
+	// FFO Yield and Cap Rate are not published on Status Invest.
+	if out.DividendYield == nil && out.PVP == nil {
+		return nil
+	}
+	return out
+}
+
+// scrapeStatusInvestField finds anchor in html and extracts the text content
+// of the first <strong class="value..."> element that follows it.
+func scrapeStatusInvestField(html, anchor string, isPercent bool) *float64 {
+	idx := strings.Index(html, anchor)
+	if idx < 0 {
+		return nil
+	}
+	sub := html[idx:]
+	strongIdx := strings.Index(sub, `<strong class="value`)
+	if strongIdx < 0 {
+		return nil
+	}
+	sub = sub[strongIdx:]
+	closeTag := strings.IndexByte(sub, '>')
+	if closeTag < 0 {
+		return nil
+	}
+	sub = sub[closeTag+1:]
+	endIdx := strings.IndexByte(sub, '<')
+	if endIdx < 0 {
+		return nil
+	}
+	raw := strings.TrimSpace(sub[:endIdx])
+	if raw == "" || raw == "-" {
+		return nil
+	}
+	if isPercent {
+		raw = strings.ReplaceAll(raw, "%", "")
+	}
+	raw = strings.ReplaceAll(raw, ",", ".")
+	v, err := strconv.ParseFloat(strings.TrimSpace(raw), 64)
+	if err != nil {
+		return nil
+	}
+	return &v
+}
+
+// scrapeStatusInvestLiquidity extracts the average daily liquidity value.
+// Status Invest formats this with dots as thousands separators (e.g. "1.563.463,48").
+func scrapeStatusInvestLiquidity(html string) *float64 {
+	idx := strings.Index(html, "Liquidez média diária")
+	if idx < 0 {
+		return nil
+	}
+	sub := html[idx:]
+	strongIdx := strings.Index(sub, `<strong class="value`)
+	if strongIdx < 0 {
+		return nil
+	}
+	sub = sub[strongIdx:]
+	closeTag := strings.IndexByte(sub, '>')
+	if closeTag < 0 {
+		return nil
+	}
+	sub = sub[closeTag+1:]
+	endIdx := strings.IndexByte(sub, '<')
+	if endIdx < 0 {
+		return nil
+	}
+	raw := strings.TrimSpace(sub[:endIdx])
+	if raw == "" || raw == "-" {
+		return nil
+	}
+	// Dots are thousands separators; comma is decimal separator.
+	raw = strings.ReplaceAll(raw, ".", "")
+	raw = strings.ReplaceAll(raw, ",", ".")
+	v, err := strconv.ParseFloat(strings.TrimSpace(raw), 64)
+	if err != nil {
+		return nil
+	}
+	return &v
+}
+
+// scrapeStatusInvestVacancy extracts the vacancy rate; returns nil when "-".
+func scrapeStatusInvestVacancy(html string) *float64 {
+	idx := strings.Index(html, `sub-value">Vacância<`)
+	if idx < 0 {
+		return nil
+	}
+	sub := html[idx:]
+	strongIdx := strings.Index(sub, `<strong class="value`)
+	if strongIdx < 0 {
+		return nil
+	}
+	sub = sub[strongIdx:]
+	closeTag := strings.IndexByte(sub, '>')
+	if closeTag < 0 {
+		return nil
+	}
+	sub = sub[closeTag+1:]
+	endIdx := strings.IndexByte(sub, '<')
+	if endIdx < 0 {
+		return nil
+	}
+	raw := strings.TrimSpace(sub[:endIdx])
+	if raw == "" || raw == "-" {
+		return nil
+	}
+	raw = strings.ReplaceAll(raw, "%", "")
+	raw = strings.ReplaceAll(raw, ",", ".")
+	v, err := strconv.ParseFloat(strings.TrimSpace(raw), 64)
+	if err != nil {
+		return nil
+	}
+	return &v
+}
+
 func (s *Service) fetchFIIMetrics(ctx context.Context, tickers []string) map[string]*fiiScrapedData {
 	out := make(map[string]*fiiScrapedData, len(tickers))
 	if len(tickers) == 0 {
@@ -925,7 +1073,7 @@ func (s *Service) fetchFIIMetrics(ctx context.Context, tickers []string) map[str
 		wg.Add(1)
 		go func(t string) {
 			defer wg.Done()
-			data := s.scrapeFundamentusFII(ctx, t)
+			data := s.scrapeStatusInvestFII(ctx, t)
 			if data != nil {
 				mu.Lock()
 				out[strings.ToUpper(t)] = data
