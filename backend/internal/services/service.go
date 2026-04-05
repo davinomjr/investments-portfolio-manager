@@ -851,6 +851,46 @@ func (s *Service) scrapeFundamentusFII(ctx context.Context, ticker string) *fiiS
 	return out
 }
 
+// scrapeFundsExplorerFII fetches public FII metrics from fundsexplorer.com.br.
+// It is more production-friendly than Status Invest on Railway.
+func (s *Service) scrapeFundsExplorerFII(ctx context.Context, ticker string) *fiiScrapedData {
+	url := "https://www.fundsexplorer.com.br/funds/" + strings.ToLower(ticker)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		log.Printf("fundsexplorer fii: build request %s: %v", ticker, err)
+		return nil
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+	req.Header.Set("Accept-Language", "pt-BR,pt;q=0.9")
+	resp, err := s.Client.Do(req)
+	if err != nil {
+		log.Printf("fundsexplorer fii: request %s: %v", ticker, err)
+		return nil
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("fundsexplorer fii: unexpected status %s for %s", resp.Status, ticker)
+		return nil
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("fundsexplorer fii: read %s: %v", ticker, err)
+		return nil
+	}
+	text := normalizeStatusInvestText(string(body))
+	out := &fiiScrapedData{
+		DividendYield:   scrapeFundsExplorerPercent(text, "dividend yield", "patrimonio liquido"),
+		PVP:             scrapeFundsExplorerNumber(text, "p/vp", "vale a pena investir"),
+		DividendPerUnit: scrapeFundsExplorerCurrency(text, "ultimo rendimento", "dividend yield"),
+		AvgDailyVolume:  scrapeFundsExplorerAbbrevCurrency(text, "liquidez media diaria", "ultimo rendimento"),
+	}
+	if out.DividendYield == nil && out.PVP == nil {
+		log.Printf("fundsexplorer fii: no parsable data for %s status=%s final_url=%s", ticker, resp.Status, resp.Request.URL.String())
+		return nil
+	}
+	return out
+}
+
 func scrapeFundamentusField(html, label string, isPercent bool) *float64 {
 	// Anchor on the label inside its txt span to avoid matching tooltip title attributes
 	// which may also contain the label text (e.g. "FFO Yield" appears in its own tooltip).
@@ -1096,6 +1136,48 @@ func parseBrazilianNumber(raw string) *float64 {
 	return &v
 }
 
+func scrapeFundsExplorerPercent(text, start, end string) *float64 {
+	section := statusInvestSection(text, start, end)
+	match := regexp.MustCompile(`([0-9]{1,3}(?:\.[0-9]{3})*(?:,[0-9]+)?|[0-9]+(?:,[0-9]+)?)\s*%`).FindStringSubmatch(section)
+	if len(match) < 2 {
+		return nil
+	}
+	return parseBrazilianNumber(match[1])
+}
+
+func scrapeFundsExplorerNumber(text, start, end string) *float64 {
+	section := statusInvestSection(text, start, end)
+	return findFirstNumber(section)
+}
+
+func scrapeFundsExplorerCurrency(text, start, end string) *float64 {
+	section := statusInvestSection(text, start, end)
+	return findFirstCurrency(section)
+}
+
+func scrapeFundsExplorerAbbrevCurrency(text, start, end string) *float64 {
+	section := statusInvestSection(text, start, end)
+	match := regexp.MustCompile(`([0-9]{1,3}(?:,[0-9]+)?)\s*([kmb])`).FindStringSubmatch(section)
+	if len(match) < 3 {
+		return findFirstCurrency(section)
+	}
+	value := parseBrazilianNumber(match[1])
+	if value == nil {
+		return nil
+	}
+	multiplier := 1.0
+	switch match[2] {
+	case "k":
+		multiplier = 1_000
+	case "m":
+		multiplier = 1_000_000
+	case "b":
+		multiplier = 1_000_000_000
+	}
+	v := *value * multiplier
+	return &v
+}
+
 func (s *Service) fetchFIIMetrics(ctx context.Context, tickers []string) map[string]*fiiScrapedData {
 	out := make(map[string]*fiiScrapedData, len(tickers))
 	if len(tickers) == 0 {
@@ -1107,10 +1189,9 @@ func (s *Service) fetchFIIMetrics(ctx context.Context, tickers []string) map[str
 		wg.Add(1)
 		go func(t string) {
 			defer wg.Done()
-			data := s.scrapeStatusInvestFII(ctx, t)
+			data := s.scrapeFundsExplorerFII(ctx, t)
 			if data == nil {
-				// Status Invest may be geo-blocked in production; fall back to Fundamentus.
-				log.Printf("statusinvest fii: no data for %s, falling back to Fundamentus", t)
+				log.Printf("fundsexplorer fii: no data for %s, falling back to Fundamentus", t)
 				data = s.scrapeFundamentusFII(ctx, t)
 			}
 			if data != nil {

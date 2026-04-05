@@ -24,7 +24,7 @@ export default async function FIIsPage() {
             FII metrics for your held real estate fund positions.
           </h1>
           <p className="mt-3 max-w-2xl text-base text-white/65 md:mt-4 md:text-lg">
-            Dividend yield, P/VP, vacancy, liquidity, and dividend per unit sourced from Status Invest, with Fundamentus as fallback.
+            Dividend yield, P/VP, liquidity, and dividend per unit sourced from Funds Explorer, with Fundamentus as fallback.
           </p>
         </div>
         <div className="hidden rounded-[2rem] border border-white/20 bg-white/10 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.4)] md:block">
