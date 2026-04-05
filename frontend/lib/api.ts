@@ -192,7 +192,7 @@ export async function fetchMonteCarloSimulation(
     }
   }
   const path = params.size > 0 ? `/portfolio/monte-carlo?${params.toString()}` : "/portfolio/monte-carlo";
-  const response = await fetch(`${API_BASE}${path}`, { cache: "no-store" });
+  const response = await serverFetch(path);
   if (!response.ok) {
     throw new Error("Failed to load Monte Carlo simulation.");
   }
