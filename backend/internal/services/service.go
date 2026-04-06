@@ -151,7 +151,7 @@ func (s *Service) ImportFile(ctx context.Context, file multipart.File, filename 
 
 func (s *Service) GetPositions(ctx context.Context) ([]models.PositionResponse, error) {
 	rows, err := s.DB.QueryContext(ctx, `
-		SELECT a.ticker, a.asset_type, p.quantity, p.avg_price, COALESCE(p.broker,''), p.source, p.last_updated, p.hidden
+		SELECT a.ticker, a.asset_type, p.quantity, p.avg_price, a.currency, COALESCE(p.broker,''), p.source, p.last_updated, p.hidden
 		FROM positions p
 		JOIN assets a ON a.id = p.asset_id
 		ORDER BY datetime(p.last_updated) DESC`)
@@ -162,7 +162,7 @@ func (s *Service) GetPositions(ctx context.Context) ([]models.PositionResponse, 
 	out := make([]models.PositionResponse, 0)
 	for rows.Next() {
 		var item models.PositionResponse
-		if err := rows.Scan(&item.Ticker, &item.AssetType, &item.Quantity, &item.AvgPrice, &item.Broker, &item.Source, &item.LastUpdated, &item.Hidden); err != nil {
+		if err := rows.Scan(&item.Ticker, &item.AssetType, &item.Quantity, &item.AvgPrice, &item.Currency, &item.Broker, &item.Source, &item.LastUpdated, &item.Hidden); err != nil {
 			return nil, err
 		}
 		out = append(out, item)
@@ -179,15 +179,45 @@ func (s *Service) SetPositionsVisibility(ctx context.Context, visible bool) erro
 	return err
 }
 
+// fetchUSDToBRL returns the current USD→BRL exchange rate using the
+// AwesomeAPI. Falls back to 1.0 on any error so callers degrade gracefully.
+func fetchUSDToBRL(ctx context.Context) float64 {
+	type awesomeResp struct {
+		USDBRL struct {
+			Bid string `json:"bid"`
+		} `json:"USDBRL"`
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://economia.awesomeapi.com.br/json/last/USD-BRL", nil)
+	if err != nil {
+		return 1.0
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return 1.0
+	}
+	defer resp.Body.Close()
+	var data awesomeResp
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		return 1.0
+	}
+	rate, err := strconv.ParseFloat(data.USDBRL.Bid, 64)
+	if err != nil || rate <= 0 {
+		return 1.0
+	}
+	return rate
+}
+
 func (s *Service) GetPortfolio(ctx context.Context) (models.PortfolioResponse, error) {
 	rows, err := s.DB.QueryContext(ctx, `
-		SELECT a.ticker, a.asset_type, p.quantity, p.avg_price
+		SELECT a.ticker, a.asset_type, p.quantity, p.avg_price, a.currency
 		FROM positions p
 		JOIN assets a ON a.id = p.asset_id`)
 	if err != nil {
 		return models.PortfolioResponse{}, err
 	}
 	defer rows.Close()
+
+	usdToBRL := fetchUSDToBRL(ctx)
 
 	type alloc struct {
 		assetType string
@@ -198,12 +228,15 @@ func (s *Service) GetPortfolio(ctx context.Context) (models.PortfolioResponse, e
 	count := 0
 	for rows.Next() {
 		count++
-		var ticker, assetType string
+		var ticker, assetType, currency string
 		var qty, price float64
-		if err := rows.Scan(&ticker, &assetType, &qty, &price); err != nil {
+		if err := rows.Scan(&ticker, &assetType, &qty, &price, &currency); err != nil {
 			return models.PortfolioResponse{}, err
 		}
 		value := qty * price
+		if currency == "USD" {
+			value *= usdToBRL
+		}
 		total += value
 		allocByTicker[ticker] = alloc{assetType: assetType, value: value}
 	}

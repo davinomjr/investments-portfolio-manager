@@ -5,10 +5,11 @@ import type { Position } from "@/lib/api";
 import { getAssetStyle } from "@/lib/asset-style";
 import { useVisibility } from "@/components/visibility-context";
 
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat("pt-BR", {
+function formatCurrency(value: number, currency = "BRL") {
+  const locale = currency === "BRL" ? "pt-BR" : "en-US";
+  return new Intl.NumberFormat(locale, {
     style: "currency",
-    currency: "BRL",
+    currency,
     maximumFractionDigits: 2,
   }).format(value);
 }
@@ -64,8 +65,8 @@ export function PositionsTable({ positions }: { positions: Position[] }) {
                     </span>
                   </td>
                   <td className="px-3 py-2.5 md:px-4 md:py-3">{visible ? position.quantity : "**"}</td>
-                  <td className="hidden px-3 py-2.5 sm:table-cell md:px-4 md:py-3">{visible ? formatCurrency(position.avg_price) : "**"}</td>
-                  <td className="rounded-r-2xl px-3 py-2.5 md:px-4 md:py-3">{visible ? formatCurrency(position.quantity * position.avg_price) : "**"}</td>
+                  <td className="hidden px-3 py-2.5 sm:table-cell md:px-4 md:py-3">{visible ? formatCurrency(position.avg_price, position.currency) : "**"}</td>
+                  <td className="rounded-r-2xl px-3 py-2.5 md:px-4 md:py-3">{visible ? formatCurrency(position.quantity * position.avg_price, position.currency) : "**"}</td>
                 </tr>
               ))}
             </tbody>
