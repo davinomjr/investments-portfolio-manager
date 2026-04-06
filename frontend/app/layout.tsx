@@ -26,7 +26,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       <body>
         <VisibilityProvider>
           <TopNav />
-          <div className="pb-24 md:pb-0">{children}</div>
+          <div className="pb-32 md:pb-0">{children}</div>
           <BottomNav />
         </VisibilityProvider>
       </body>
