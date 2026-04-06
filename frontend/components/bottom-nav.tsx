@@ -21,11 +21,11 @@ export function BottomNav() {
   }, [pathname]);
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-20 md:hidden">
-      <div
-        className="mx-4 mb-4 flex items-center justify-around rounded-full border border-white/10 bg-[#1a1d25]/95 px-2 py-2 shadow-xl backdrop-blur"
-        style={{ marginBottom: "max(1rem, env(safe-area-inset-bottom))" }}
-      >
+    <nav
+      className="fixed bottom-0 left-0 right-0 z-20 md:hidden flex justify-center"
+      style={{ paddingBottom: "max(1.25rem, env(safe-area-inset-bottom))" }}
+    >
+      <div className="flex items-center gap-1 rounded-full bg-[#0d0f14]/90 px-2 py-2 shadow-2xl backdrop-blur border border-white/[0.06]">
         {ITEMS.map((item) => {
           const active = pathname === item.href;
           const pending = pendingHref === item.href && !active;
@@ -35,15 +35,15 @@ export function BottomNav() {
               href={item.href}
               onClick={() => { if (!active) setPendingHref(item.href); }}
               aria-label={item.label}
-              className={`flex items-center justify-center rounded-full p-3 transition-all ${
+              className={`flex items-center justify-center rounded-full p-3 transition-all duration-150 ${
                 active
-                  ? "bg-white text-[#1a1d25]"
+                  ? "bg-white/90 text-[#0d0f14]"
                   : pending
-                  ? "animate-pulse text-white/50"
-                  : "text-white/35 hover:text-white/70"
+                  ? "animate-pulse text-white/40"
+                  : "text-white/30 hover:text-white/60 hover:bg-white/5"
               }`}
             >
-              <item.Icon size={22} strokeWidth={1.75} />
+              <item.Icon size={19} strokeWidth={1.75} />
             </Link>
           );
         })}
