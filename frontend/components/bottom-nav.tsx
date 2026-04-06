@@ -25,7 +25,7 @@ export function BottomNav() {
       className="fixed bottom-0 left-0 right-0 z-20 md:hidden flex justify-center"
       style={{ paddingBottom: "max(1.25rem, env(safe-area-inset-bottom))" }}
     >
-      <div className="flex items-center gap-1 rounded-full bg-[#0d0f14]/90 px-2 py-2 shadow-2xl backdrop-blur border border-white/[0.06]">
+      <div className="flex items-center gap-2 rounded-full bg-[#0d0f14]/90 px-3 py-2.5 shadow-2xl backdrop-blur border border-white/[0.06]">
         {ITEMS.map((item) => {
           const active = pathname === item.href;
           const pending = pendingHref === item.href && !active;
@@ -35,7 +35,7 @@ export function BottomNav() {
               href={item.href}
               onClick={() => { if (!active) setPendingHref(item.href); }}
               aria-label={item.label}
-              className={`flex items-center justify-center rounded-full p-3 transition-all duration-150 ${
+              className={`flex items-center justify-center rounded-full p-3.5 transition-all duration-150 ${
                 active
                   ? "bg-white/90 text-[#0d0f14]"
                   : pending
@@ -43,7 +43,7 @@ export function BottomNav() {
                   : "text-white/30 hover:text-white/60 hover:bg-white/5"
               }`}
             >
-              <item.Icon size={19} strokeWidth={1.75} />
+              <item.Icon size={22} strokeWidth={1.75} />
             </Link>
           );
         })}
