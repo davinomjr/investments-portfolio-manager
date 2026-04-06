@@ -3,6 +3,7 @@ export type Position = {
   asset_type: string;
   quantity: number;
   avg_price: number;
+  currency: string;
   broker: string | null;
   source: string;
   last_updated: string;
