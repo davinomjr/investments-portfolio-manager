@@ -29,12 +29,25 @@ class WorkerConfig:
     dashboard_path: str = "/"
     positions_path: str = "/minha-carteira/investimentos/posicao"
     login_timeout_ms: int = 120000
-    session_file: Path = Path(__file__).resolve().parents[1] / "data" / "b3_session.json"
-    download_dir: Path = Path(__file__).resolve().parents[1] / "data" / "downloads"
+    session_file: Path = field(default_factory=lambda: Path(os.environ.get(
+        "B3_SESSION_FILE",
+        str(Path(__file__).resolve().parents[1] / "data" / "b3_session.json"),
+    )))
+    download_dir: Path = field(default_factory=lambda: Path(os.environ.get(
+        "B3_DOWNLOAD_DIR",
+        str(Path(__file__).resolve().parents[1] / "data" / "downloads"),
+    )))
+    artifacts_dir: Path = field(default_factory=lambda: Path(os.environ.get(
+        "B3_ARTIFACTS_DIR",
+        str(Path(__file__).resolve().parents[1] / "data" / "artifacts"),
+    )))
     headless: bool = field(default_factory=lambda: os.environ.get("HEADLESS", "false").lower() in ("1", "true", "yes"))
     timeout_ms: int = 30000
     b3_cpf: str = field(default_factory=lambda: os.environ.get("B3_CPF", ""))
     b3_password: str = field(default_factory=lambda: os.environ.get("B3_PASSWORD", ""))
+    api_base_url: str = field(default_factory=lambda: os.environ.get("API_BASE_URL", "http://localhost:8000"))
+    browser_worker_secret: str = field(default_factory=lambda: os.environ.get("BROWSER_WORKER_SECRET", ""))
+    queue_poll_interval_seconds: int = field(default_factory=lambda: int(os.environ.get("QUEUE_POLL_INTERVAL_SECONDS", "10")))
 
 
 config = WorkerConfig()

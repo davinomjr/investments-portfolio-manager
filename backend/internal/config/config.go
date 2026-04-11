@@ -31,6 +31,7 @@ type Config struct {
 	AuthJWTExpiry                   time.Duration
 	IBKRFlexToken                   string
 	IBKRFlexQueryID                 string
+	BrowserWorkerSecret             string
 	CORSOrigins                     []string
 }
 
@@ -61,6 +62,7 @@ func Load() Config {
 		AuthJWTExpiry:                   durationEnv("AUTH_JWT_EXPIRY", 168*time.Hour),
 		IBKRFlexToken:                   os.Getenv("IBKR_FLEX_TOKEN"),
 		IBKRFlexQueryID:                 os.Getenv("IBKR_FLEX_QUERY_ID"),
+		BrowserWorkerSecret:             os.Getenv("BROWSER_WORKER_SECRET"),
 		CORSOrigins:                     parseCORSOrigins(env("CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000")),
 	}
 	return cfg

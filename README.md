@@ -79,6 +79,44 @@ This accepts `.xlsx` or `.csv` exports and normalizes the holdings without openi
 
 Set `WORKER_COMMAND` or `WORKER_PYTHON` if you want the Go backend to call the worker through a custom Python executable or wrapper.
 
+## Local semi-automatic B3 sync with Docker Compose
+
+The local compose stack now includes a dedicated `browser-worker` service that polls the backend for pending B3 sync tasks.
+
+1. Start the stack:
+
+```bash
+docker compose up --build
+```
+
+2. Bootstrap a B3 session into the shared worker volume:
+
+```bash
+docker compose run --rm -e HEADLESS=false -w /app/worker browser-worker python3 -m app.main login
+```
+
+3. Trigger a B3 sync from the UI or API:
+
+```bash
+curl -X POST http://127.0.0.1:8000/portfolio/import-b3 \
+  -H 'Content-Type: application/json' \
+  --cookie "auth_token=YOUR_TOKEN"
+```
+
+4. Watch the worker process claim and run the task:
+
+```bash
+docker compose logs -f browser-worker
+```
+
+5. Verify the latest import state:
+
+```bash
+curl http://127.0.0.1:8000/portfolio/import-jobs/latest --cookie "auth_token=YOUR_TOKEN"
+```
+
+The worker stores session state and downloads under `./worker/data`, so you can restart the container and verify session reuse locally.
+
 ## Quarterly Results Setup
 
 The quarterly results panel now uses official CVM `ITR` quarterly filings.

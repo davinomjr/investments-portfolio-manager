@@ -5,12 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 
+	"golang.org/x/crypto/bcrypt"
 	"investments-portfolio-manager/backend/internal/auth"
 	"investments-portfolio-manager/backend/internal/config"
+	"investments-portfolio-manager/backend/internal/models"
 	"investments-portfolio-manager/backend/internal/services"
-	"golang.org/x/crypto/bcrypt"
 )
 
 type Server struct {
@@ -26,6 +28,9 @@ func New(svc *services.Service, cfg config.Config) http.Handler {
 	mux.HandleFunc("GET /health", server.handleHealth)
 	mux.HandleFunc("POST /auth/login", server.handleLogin)
 	mux.HandleFunc("POST /auth/logout", server.handleLogout)
+	mux.HandleFunc("POST /internal/sync-tasks/claim", server.handleClaimSyncTask)
+	mux.HandleFunc("POST /internal/sync-tasks/{id}/complete", server.handleCompleteSyncTask)
+	mux.HandleFunc("POST /internal/sync-tasks/{id}/fail", server.handleFailSyncTask)
 
 	// Authenticated routes
 	authed := http.NewServeMux()
@@ -214,6 +219,78 @@ func (s *Server) handleImportIBKR(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, resp, nil, http.StatusAccepted)
+}
+
+func (s *Server) handleClaimSyncTask(w http.ResponseWriter, r *http.Request) {
+	if !s.authorizeBrowserWorker(r) {
+		writeErr(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	var body struct {
+		Provider string `json:"provider"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeErr(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	task, err := s.Service.ClaimNextSyncTask(r.Context(), strings.TrimSpace(body.Provider))
+	if err != nil {
+		writeErr(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, models.SyncTaskClaimResponse{Task: task}, nil, http.StatusOK)
+}
+
+func (s *Server) handleCompleteSyncTask(w http.ResponseWriter, r *http.Request) {
+	if !s.authorizeBrowserWorker(r) {
+		writeErr(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	taskID, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		writeErr(w, "invalid task id", http.StatusBadRequest)
+		return
+	}
+	var body models.SyncTaskCompleteRequest
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeErr(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	if err := s.Service.CompleteSyncTask(r.Context(), taskID, body.Holdings, body.Detail); err != nil {
+		writeErr(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handleFailSyncTask(w http.ResponseWriter, r *http.Request) {
+	if !s.authorizeBrowserWorker(r) {
+		writeErr(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	taskID, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		writeErr(w, "invalid task id", http.StatusBadRequest)
+		return
+	}
+	var body models.SyncTaskFailRequest
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeErr(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	if err := s.Service.FailSyncTask(r.Context(), taskID, body.Status, body.Detail); err != nil {
+		writeErr(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) authorizeBrowserWorker(r *http.Request) bool {
+	secret := strings.TrimSpace(s.Config.BrowserWorkerSecret)
+	if secret == "" {
+		return false
+	}
+	return r.Header.Get("X-Worker-Secret") == secret
 }
 
 func withCORS(next http.Handler, allowedOrigins []string) http.Handler {

@@ -70,6 +70,17 @@ func Migrate(database *sql.DB) error {
 			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 		);`,
+		`CREATE TABLE IF NOT EXISTS sync_tasks (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			job_id INTEGER NOT NULL,
+			provider TEXT NOT NULL,
+			status TEXT NOT NULL DEFAULT 'pending',
+			payload TEXT,
+			locked_at TEXT,
+			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			FOREIGN KEY(job_id) REFERENCES import_jobs(id)
+		);`,
 		`CREATE TABLE IF NOT EXISTS sentiment_snapshots (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			asset_id INTEGER NOT NULL UNIQUE,

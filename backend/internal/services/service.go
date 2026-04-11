@@ -70,25 +70,13 @@ func normalizeRate(value float64) float64 {
 }
 
 func (s *Service) ImportB3(ctx context.Context) (models.ImportJobResponse, error) {
-	jobID, job, err := s.createJob(ctx, "b3", "running", "Import started")
+	jobID, job, err := s.createJob(ctx, "b3", "queued", "Queued for browser worker")
 	if err != nil {
 		return models.ImportJobResponse{}, err
 	}
-	// Run the worker in the background so the HTTP request returns immediately.
-	// The caller polls GET /portfolio/import-jobs/latest for the final status.
-	go func() {
-		bgCtx := context.Background()
-		holdings, err := s.runWorker(bgCtx, []string{"import", "--json"})
-		if err != nil {
-			s.updateJob(bgCtx, jobID, "requires_login", err.Error())
-			return
-		}
-		if err := s.upsertHoldings(bgCtx, holdings); err != nil {
-			s.updateJob(bgCtx, jobID, "failed", err.Error())
-			return
-		}
-		s.updateJob(bgCtx, jobID, "completed", fmt.Sprintf("Imported %d positions from B3", len(holdings)))
-	}()
+	if _, err := s.enqueueSyncTask(ctx, jobID, "b3", ""); err != nil {
+		return models.ImportJobResponse{}, err
+	}
 	return job, nil
 }
 
@@ -418,6 +406,112 @@ func (s *Service) createJob(ctx context.Context, source, status, detail string) 
 	return id, models.ImportJobResponse{ID: id, Source: source, Status: status, Detail: detail, CreatedAt: now, UpdatedAt: now}, nil
 }
 
+func (s *Service) enqueueSyncTask(ctx context.Context, jobID int64, provider, payload string) (int64, error) {
+	now := time.Now().UTC().Format(time.RFC3339)
+	result, err := s.DB.ExecContext(ctx, `INSERT INTO sync_tasks(job_id,provider,status,payload,created_at,updated_at) VALUES(?,?,?,?,?,?)`, jobID, provider, "pending", payload, now, now)
+	if err != nil {
+		return 0, err
+	}
+	return result.LastInsertId()
+}
+
+func (s *Service) ClaimNextSyncTask(ctx context.Context, provider string) (*models.SyncTaskResponse, error) {
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	var task models.SyncTaskResponse
+	err = tx.QueryRowContext(ctx, `SELECT id, job_id, provider, status, COALESCE(payload,''), created_at, updated_at
+		FROM sync_tasks
+		WHERE provider=? AND status='pending'
+		ORDER BY id ASC
+		LIMIT 1`, provider).
+		Scan(&task.ID, &task.JobID, &task.Provider, &task.Status, &task.Payload, &task.CreatedAt, &task.UpdatedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339)
+	result, err := tx.ExecContext(ctx, `UPDATE sync_tasks SET status='running', locked_at=?, updated_at=? WHERE id=? AND status='pending'`, now, now, task.ID)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return nil, err
+	}
+	if rows == 0 {
+		return nil, nil
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE import_jobs SET status='running', detail=?, updated_at=? WHERE id=?`, "B3 sync running in browser worker", now, task.JobID); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	task.Status = "running"
+	task.UpdatedAt = now
+	return &task, nil
+}
+
+func (s *Service) CompleteSyncTask(ctx context.Context, taskID int64, holdings []models.HoldingPayload, detail string) error {
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	var jobID int64
+	if err := tx.QueryRowContext(ctx, `SELECT job_id FROM sync_tasks WHERE id=?`, taskID).Scan(&jobID); err != nil {
+		return err
+	}
+	if err := s.upsertHoldingsWithTx(ctx, tx, holdings); err != nil {
+		return err
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339)
+	if detail == "" {
+		detail = fmt.Sprintf("Imported %d positions from B3", len(holdings))
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE sync_tasks SET status='done', updated_at=? WHERE id=?`, now, taskID); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE import_jobs SET status='completed', detail=?, updated_at=? WHERE id=?`, detail, now, jobID); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (s *Service) FailSyncTask(ctx context.Context, taskID int64, status, detail string) error {
+	if strings.TrimSpace(status) == "" {
+		status = "failed"
+	}
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	var jobID int64
+	if err := tx.QueryRowContext(ctx, `SELECT job_id FROM sync_tasks WHERE id=?`, taskID).Scan(&jobID); err != nil {
+		return err
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339)
+	if _, err := tx.ExecContext(ctx, `UPDATE sync_tasks SET status=?, updated_at=? WHERE id=?`, status, now, taskID); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE import_jobs SET status=?, detail=?, updated_at=? WHERE id=?`, status, detail, now, jobID); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 func (s *Service) updateJob(ctx context.Context, id int64, status, detail string) (models.ImportJobResponse, error) {
 	now := time.Now().UTC().Format(time.RFC3339)
 	if _, err := s.DB.ExecContext(ctx, `UPDATE import_jobs SET status=?, detail=?, updated_at=? WHERE id=?`, status, detail, now, id); err != nil {
@@ -518,6 +612,13 @@ func (s *Service) upsertHoldings(ctx context.Context, holdings []models.HoldingP
 		return err
 	}
 	defer tx.Rollback()
+	if err := s.upsertHoldingsWithTx(ctx, tx, holdings); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (s *Service) upsertHoldingsWithTx(ctx context.Context, tx *sql.Tx, holdings []models.HoldingPayload) error {
 	now := time.Now().UTC().Format(time.RFC3339)
 	for _, holding := range holdings {
 		var assetID int64
@@ -564,7 +665,7 @@ func (s *Service) upsertHoldings(ctx context.Context, holdings []models.HoldingP
 			return err
 		}
 	}
-	return tx.Commit()
+	return nil
 }
 
 func defaultString(value, fallback string) string {

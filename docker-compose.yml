@@ -7,7 +7,7 @@ services:
       - "8000:8000"
     volumes:
       - portfolio-data:/data
-      - ./worker/data:/app/worker/data
+      - ./worker/data:/data/browser-worker
     env_file:
       - backend/.env
       - worker/.env
@@ -15,6 +15,30 @@ services:
       - ADDR=0.0.0.0:8000
       - DATABASE_URL=/data/portfolio.db
       - CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+      - BROWSER_WORKER_SECRET=local-browser-worker-secret
+
+  browser-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    working_dir: /app/worker
+    command: ["python3", "-m", "app.main", "run-queue"]
+    volumes:
+      - portfolio-data:/data
+      - ./worker/data:/data/browser-worker
+    env_file:
+      - backend/.env
+      - worker/.env
+    environment:
+      - API_BASE_URL=http://backend:8000
+      - BROWSER_WORKER_SECRET=local-browser-worker-secret
+      - B3_SESSION_FILE=/data/browser-worker/b3_session.json
+      - B3_DOWNLOAD_DIR=/data/browser-worker/downloads
+      - B3_ARTIFACTS_DIR=/data/browser-worker/artifacts
+      - QUEUE_POLL_INTERVAL_SECONDS=5
+      - HEADLESS=true
+    depends_on:
+      - backend
 
   frontend:
     build:

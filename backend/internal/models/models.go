@@ -34,18 +34,18 @@ type PortfolioResponse struct {
 }
 
 type QuarterlyResultItem struct {
-	Ticker      string           `json:"ticker"`
-	CompanyName string           `json:"company_name,omitempty"`
-	AssetType   string           `json:"asset_type"`
-	ReportDate  string           `json:"report_date,omitempty"`
+	Ticker           string           `json:"ticker"`
+	CompanyName      string           `json:"company_name,omitempty"`
+	AssetType        string           `json:"asset_type"`
+	ReportDate       string           `json:"report_date,omitempty"`
 	Revenue          *float64         `json:"revenue"`
 	NetIncome        *float64         `json:"net_income"`
 	NetMargin        *float64         `json:"net_margin"`
 	DividendYield12M *float64         `json:"dividend_yield_12m"`
-	Sentiment   *TickerSentiment `json:"sentiment"`
-	Highlights  []string         `json:"highlights"`
-	Status      string           `json:"status"`
-	Message     string           `json:"message,omitempty"`
+	Sentiment        *TickerSentiment `json:"sentiment"`
+	Highlights       []string         `json:"highlights"`
+	Status           string           `json:"status"`
+	Message          string           `json:"message,omitempty"`
 }
 
 type QuarterlyResultsResponse struct {
@@ -94,6 +94,30 @@ type HoldingPayload struct {
 type WorkerImportResponse struct {
 	Holdings []HoldingPayload `json:"holdings"`
 	Source   string           `json:"source"`
+}
+
+type SyncTaskResponse struct {
+	ID        int64  `json:"id"`
+	JobID     int64  `json:"job_id"`
+	Provider  string `json:"provider"`
+	Status    string `json:"status"`
+	Payload   string `json:"payload,omitempty"`
+	CreatedAt string `json:"created_at"`
+	UpdatedAt string `json:"updated_at"`
+}
+
+type SyncTaskClaimResponse struct {
+	Task *SyncTaskResponse `json:"task,omitempty"`
+}
+
+type SyncTaskCompleteRequest struct {
+	Holdings []HoldingPayload `json:"holdings"`
+	Detail   string           `json:"detail,omitempty"`
+}
+
+type SyncTaskFailRequest struct {
+	Status string `json:"status"`
+	Detail string `json:"detail"`
 }
 
 type TrackedAsset struct {
