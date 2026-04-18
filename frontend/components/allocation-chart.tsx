@@ -4,17 +4,30 @@ import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 
 import type { Allocation } from "@/lib/api";
 import { getAssetStyle } from "@/lib/asset-style";
+import { useVisibility } from "@/components/visibility-context";
+
+const brlFormatter = new Intl.NumberFormat("pt-BR", {
+  style: "currency",
+  currency: "BRL",
+  maximumFractionDigits: 2,
+});
 
 export function AllocationChart({ allocations }: { allocations: Allocation[] }) {
-  const grouped = (allocations ?? []).reduce<Record<string, number>>((acc, item) => {
+  const { visible } = useVisibility();
+
+  const grouped = (allocations ?? []).reduce<Record<string, { weight: number; value: number }>>((acc, item) => {
     const key = item.asset_type || "Other";
-    acc[key] = (acc[key] ?? 0) + item.weight * 100;
+    const entry = acc[key] ?? { weight: 0, value: 0 };
+    entry.weight += item.weight * 100;
+    entry.value += item.market_value;
+    acc[key] = entry;
     return acc;
   }, {});
 
-  const data = Object.entries(grouped).map(([assetType, weight]) => ({
+  const data = Object.entries(grouped).map(([assetType, { weight, value }]) => ({
     name: assetType,
     value: Number(weight.toFixed(2)),
+    marketValue: value,
     assetType,
   }));
 
@@ -44,8 +57,9 @@ export function AllocationChart({ allocations }: { allocations: Allocation[] }) 
               itemStyle={{ color: "#fff" }}
               labelStyle={{ color: "#fff" }}
               formatter={(value: number, _name, item) => {
-                const payload = item.payload as { assetType: string };
-                return [`${value.toFixed(2)}%`, getAssetStyle(payload.assetType).label];
+                const payload = item.payload as { assetType: string; marketValue: number };
+                const amount = visible ? brlFormatter.format(payload.marketValue) : "**";
+                return [`${amount} (${value.toFixed(2)}%)`, getAssetStyle(payload.assetType).label];
               }}
               labelFormatter={() => ""}
             />
