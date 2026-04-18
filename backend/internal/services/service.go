@@ -83,7 +83,7 @@ func (s *Service) ImportB3(ctx context.Context) (models.ImportJobResponse, error
 			s.updateJob(bgCtx, jobID, "requires_login", err.Error())
 			return
 		}
-		if err := s.upsertHoldings(bgCtx, holdings); err != nil {
+		if err := s.upsertHoldings(bgCtx, holdings, "b3"); err != nil {
 			s.updateJob(bgCtx, jobID, "failed", err.Error())
 			return
 		}
@@ -110,7 +110,7 @@ func (s *Service) ImportIBKR(ctx context.Context) (models.ImportJobResponse, err
 			s.updateJob(bgCtx, jobID, "failed", err.Error())
 			return
 		}
-		if err := s.upsertHoldings(bgCtx, holdings); err != nil {
+		if err := s.upsertHoldings(bgCtx, holdings, "ibkr"); err != nil {
 			s.updateJob(bgCtx, jobID, "failed", err.Error())
 			return
 		}
@@ -142,7 +142,7 @@ func (s *Service) ImportFile(ctx context.Context, file multipart.File, filename 
 		updated, _ := s.updateJob(ctx, jobID, "failed", err.Error())
 		return updated, nil
 	}
-	if err := s.upsertHoldings(ctx, holdings); err != nil {
+	if err := s.upsertHoldings(ctx, holdings, "b3"); err != nil {
 		updated, _ := s.updateJob(ctx, jobID, "failed", err.Error())
 		return updated, nil
 	}
@@ -545,13 +545,17 @@ func (s *Service) runWorkerWithEnv(ctx context.Context, args []string, extraEnv 
 	return payload.Holdings, nil
 }
 
-func (s *Service) upsertHoldings(ctx context.Context, holdings []models.HoldingPayload) error {
+func (s *Service) upsertHoldings(ctx context.Context, holdings []models.HoldingPayload, source string) error {
+	if len(holdings) == 0 {
+		return nil
+	}
 	tx, err := s.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
 	now := time.Now().UTC().Format(time.RFC3339)
+	seenAssetIDs := make([]int64, 0, len(holdings))
 	for _, holding := range holdings {
 		var assetID int64
 		err := tx.QueryRowContext(ctx, `SELECT id FROM assets WHERE ticker=?`, holding.Ticker).Scan(&assetID)
@@ -586,17 +590,31 @@ func (s *Service) upsertHoldings(ctx context.Context, holdings []models.HoldingP
 		var posID int64
 		err = tx.QueryRowContext(ctx, `SELECT id FROM positions WHERE user_id=? AND asset_id=?`, s.Config.DefaultUserID, assetID).Scan(&posID)
 		if errors.Is(err, sql.ErrNoRows) {
-			if _, err := tx.ExecContext(ctx, `INSERT INTO positions(user_id,asset_id,quantity,avg_price,broker,source,last_updated) VALUES(?,?,?,?,?,?,?)`, s.Config.DefaultUserID, assetID, holding.Quantity, holding.AveragePrice, nullIfEmpty(holding.Broker), "b3", now); err != nil {
+			if _, err := tx.ExecContext(ctx, `INSERT INTO positions(user_id,asset_id,quantity,avg_price,broker,source,last_updated) VALUES(?,?,?,?,?,?,?)`, s.Config.DefaultUserID, assetID, holding.Quantity, holding.AveragePrice, nullIfEmpty(holding.Broker), source, now); err != nil {
 				return err
 			}
 		} else if err == nil {
-			if _, err := tx.ExecContext(ctx, `UPDATE positions SET quantity=?, avg_price=?, broker=?, source='b3', last_updated=? WHERE id=?`, holding.Quantity, holding.AveragePrice, nullIfEmpty(holding.Broker), now, posID); err != nil {
+			if _, err := tx.ExecContext(ctx, `UPDATE positions SET quantity=?, avg_price=?, broker=?, source=?, last_updated=? WHERE id=?`, holding.Quantity, holding.AveragePrice, nullIfEmpty(holding.Broker), source, now, posID); err != nil {
 				return err
 			}
 		} else {
 			return err
 		}
+		seenAssetIDs = append(seenAssetIDs, assetID)
 	}
+
+	placeholders := strings.Repeat("?,", len(seenAssetIDs))
+	placeholders = placeholders[:len(placeholders)-1]
+	args := make([]any, 0, len(seenAssetIDs)+2)
+	args = append(args, s.Config.DefaultUserID, source)
+	for _, id := range seenAssetIDs {
+		args = append(args, id)
+	}
+	query := fmt.Sprintf(`DELETE FROM positions WHERE user_id=? AND source=? AND asset_id NOT IN (%s)`, placeholders)
+	if _, err := tx.ExecContext(ctx, query, args...); err != nil {
+		return err
+	}
+
 	return tx.Commit()
 }
 
