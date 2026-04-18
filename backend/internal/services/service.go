@@ -201,86 +201,35 @@ func (s *Service) SetPositionsVisibility(ctx context.Context, visible bool) erro
 	return err
 }
 
-// fallbackUSDToBRL is used when the FX API is unreachable and no rate has
-// been cached yet. A 1.0 fallback (the old behavior) silently treats USD
-// holdings as BRL and distorts allocation weights, so we pick a recent
-// realistic rate instead.
-const fallbackUSDToBRL = 5.5
-
 // usdToBRLCacheTTL caps how often the FX API is hit. A cached rate is reused
 // within this window so /portfolio doesn't make an outbound request on every
 // page load.
 const usdToBRLCacheTTL = time.Hour
 
-// getUSDToBRL returns the USD→BRL exchange rate, cached in memory for
-// usdToBRLCacheTTL. On API failure it returns the most recent cached rate,
-// or fallbackUSDToBRL if the API has never succeeded.
-func (s *Service) getUSDToBRL(ctx context.Context) float64 {
+// getUSDToBRL returns the USD→BRL exchange rate from the Frankfurter API,
+// cached in memory for usdToBRLCacheTTL. Returns an error if the fetch fails —
+// there is no fallback rate.
+func (s *Service) getUSDToBRL(ctx context.Context) (float64, error) {
 	s.fxMu.Lock()
 	if s.fxRate > 0 && time.Since(s.fxFetchedAt) < usdToBRLCacheTTL {
 		rate := s.fxRate
 		s.fxMu.Unlock()
-		return rate
+		return rate, nil
 	}
 	s.fxMu.Unlock()
 
 	rate, err := s.fetchUSDToBRL(ctx)
-	s.fxMu.Lock()
-	defer s.fxMu.Unlock()
 	if err != nil {
-		log.Printf("usd-brl fetch failed: %v", err)
-		if s.fxRate > 0 {
-			return s.fxRate
-		}
-		return fallbackUSDToBRL
+		return 0, fmt.Errorf("fetch usd-brl rate: %w", err)
 	}
+	s.fxMu.Lock()
 	s.fxRate = rate
 	s.fxFetchedAt = time.Now()
-	return rate
-}
-
-func (s *Service) fetchUSDToBRL(ctx context.Context) (float64, error) {
-	if r, err := s.fetchUSDToBRLAwesome(ctx); err == nil {
-		return r, nil
-	} else {
-		log.Printf("usd-brl awesomeapi failed: %v; trying frankfurter", err)
-	}
-	return s.fetchUSDToBRLFrankfurter(ctx)
-}
-
-func (s *Service) fetchUSDToBRLAwesome(ctx context.Context) (float64, error) {
-	type awesomeResp struct {
-		USDBRL struct {
-			Bid string `json:"bid"`
-		} `json:"USDBRL"`
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://economia.awesomeapi.com.br/json/last/USD-BRL", nil)
-	if err != nil {
-		return 0, err
-	}
-	resp, err := s.Client.Do(req)
-	if err != nil {
-		return 0, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode >= 400 {
-		return 0, fmt.Errorf("status %d", resp.StatusCode)
-	}
-	var data awesomeResp
-	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
-		return 0, err
-	}
-	rate, err := strconv.ParseFloat(data.USDBRL.Bid, 64)
-	if err != nil {
-		return 0, err
-	}
-	if rate <= 0 {
-		return 0, fmt.Errorf("non-positive rate %v", rate)
-	}
+	s.fxMu.Unlock()
 	return rate, nil
 }
 
-func (s *Service) fetchUSDToBRLFrankfurter(ctx context.Context) (float64, error) {
+func (s *Service) fetchUSDToBRL(ctx context.Context) (float64, error) {
 	type frankfurterResp struct {
 		Rates map[string]float64 `json:"rates"`
 	}
@@ -317,28 +266,47 @@ func (s *Service) GetPortfolio(ctx context.Context) (models.PortfolioResponse, e
 	}
 	defer rows.Close()
 
-	usdToBRL := s.getUSDToBRL(ctx)
-
 	type alloc struct {
 		assetType string
 		value     float64
 	}
+	type rawPos struct {
+		ticker, assetType, currency string
+		qty, price                  float64
+	}
+	var raws []rawPos
+	hasUSD := false
+	for rows.Next() {
+		var r rawPos
+		if err := rows.Scan(&r.ticker, &r.assetType, &r.qty, &r.price, &r.currency); err != nil {
+			return models.PortfolioResponse{}, err
+		}
+		if r.currency == "USD" {
+			hasUSD = true
+		}
+		raws = append(raws, r)
+	}
+
+	usdToBRL := 0.0
+	if hasUSD {
+		rate, err := s.getUSDToBRL(ctx)
+		if err != nil {
+			return models.PortfolioResponse{}, err
+		}
+		usdToBRL = rate
+	}
+
 	allocByTicker := map[string]alloc{}
 	total := 0.0
 	count := 0
-	for rows.Next() {
+	for _, r := range raws {
 		count++
-		var ticker, assetType, currency string
-		var qty, price float64
-		if err := rows.Scan(&ticker, &assetType, &qty, &price, &currency); err != nil {
-			return models.PortfolioResponse{}, err
-		}
-		value := qty * price
-		if currency == "USD" {
+		value := r.qty * r.price
+		if r.currency == "USD" {
 			value *= usdToBRL
 		}
 		total += value
-		allocByTicker[ticker] = alloc{assetType: assetType, value: value}
+		allocByTicker[r.ticker] = alloc{assetType: r.assetType, value: value}
 	}
 	allocations := make([]models.AllocationItem, 0, len(allocByTicker))
 	for ticker, item := range allocByTicker {
