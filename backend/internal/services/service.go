@@ -35,6 +35,10 @@ type Service struct {
 	DB     *sql.DB
 	Config config.Config
 	Client *http.Client
+
+	fxMu        sync.Mutex
+	fxRate      float64
+	fxFetchedAt time.Time
 }
 
 func New(db *sql.DB, cfg config.Config) *Service {
@@ -179,9 +183,45 @@ func (s *Service) SetPositionsVisibility(ctx context.Context, visible bool) erro
 	return err
 }
 
-// fetchUSDToBRL returns the current USD→BRL exchange rate using the
-// AwesomeAPI. Falls back to 1.0 on any error so callers degrade gracefully.
-func fetchUSDToBRL(ctx context.Context) float64 {
+// fallbackUSDToBRL is used when the FX API is unreachable and no rate has
+// been cached yet. A 1.0 fallback (the old behavior) silently treats USD
+// holdings as BRL and distorts allocation weights, so we pick a recent
+// realistic rate instead.
+const fallbackUSDToBRL = 5.5
+
+// usdToBRLCacheTTL caps how often the FX API is hit. A cached rate is reused
+// within this window so /portfolio doesn't make an outbound request on every
+// page load.
+const usdToBRLCacheTTL = time.Hour
+
+// getUSDToBRL returns the USD→BRL exchange rate, cached in memory for
+// usdToBRLCacheTTL. On API failure it returns the most recent cached rate,
+// or fallbackUSDToBRL if the API has never succeeded.
+func (s *Service) getUSDToBRL(ctx context.Context) float64 {
+	s.fxMu.Lock()
+	if s.fxRate > 0 && time.Since(s.fxFetchedAt) < usdToBRLCacheTTL {
+		rate := s.fxRate
+		s.fxMu.Unlock()
+		return rate
+	}
+	s.fxMu.Unlock()
+
+	rate, err := s.fetchUSDToBRL(ctx)
+	s.fxMu.Lock()
+	defer s.fxMu.Unlock()
+	if err != nil {
+		log.Printf("usd-brl fetch failed: %v", err)
+		if s.fxRate > 0 {
+			return s.fxRate
+		}
+		return fallbackUSDToBRL
+	}
+	s.fxRate = rate
+	s.fxFetchedAt = time.Now()
+	return rate
+}
+
+func (s *Service) fetchUSDToBRL(ctx context.Context) (float64, error) {
 	type awesomeResp struct {
 		USDBRL struct {
 			Bid string `json:"bid"`
@@ -189,22 +229,28 @@ func fetchUSDToBRL(ctx context.Context) float64 {
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://economia.awesomeapi.com.br/json/last/USD-BRL", nil)
 	if err != nil {
-		return 1.0
+		return 0, err
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := s.Client.Do(req)
 	if err != nil {
-		return 1.0
+		return 0, err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		return 0, fmt.Errorf("status %d", resp.StatusCode)
+	}
 	var data awesomeResp
 	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
-		return 1.0
+		return 0, err
 	}
 	rate, err := strconv.ParseFloat(data.USDBRL.Bid, 64)
-	if err != nil || rate <= 0 {
-		return 1.0
+	if err != nil {
+		return 0, err
 	}
-	return rate
+	if rate <= 0 {
+		return 0, fmt.Errorf("non-positive rate %v", rate)
+	}
+	return rate, nil
 }
 
 func (s *Service) GetPortfolio(ctx context.Context) (models.PortfolioResponse, error) {
@@ -217,7 +263,7 @@ func (s *Service) GetPortfolio(ctx context.Context) (models.PortfolioResponse, e
 	}
 	defer rows.Close()
 
-	usdToBRL := fetchUSDToBRL(ctx)
+	usdToBRL := s.getUSDToBRL(ctx)
 
 	type alloc struct {
 		assetType string
