@@ -394,7 +394,7 @@ func TestUpsertHoldingsInsertsNew(t *testing.T) {
 	holdings := []models.HoldingPayload{
 		{Ticker: "PETR4", Quantity: 10, AveragePrice: 30.0, Broker: "XP", AssetType: "stock", Currency: "BRL"},
 	}
-	if err := svc.upsertHoldings(ctx, holdings); err != nil {
+	if err := svc.upsertHoldings(ctx, holdings, "b3"); err != nil {
 		t.Fatalf("upsertHoldings: %v", err)
 	}
 
@@ -427,14 +427,14 @@ func TestUpsertHoldingsUpdatesExisting(t *testing.T) {
 	first := []models.HoldingPayload{
 		{Ticker: "PETR4", Quantity: 10, AveragePrice: 30.0, Broker: "XP", AssetType: "stock", Currency: "BRL"},
 	}
-	if err := svc.upsertHoldings(ctx, first); err != nil {
+	if err := svc.upsertHoldings(ctx, first, "b3"); err != nil {
 		t.Fatalf("first upsert: %v", err)
 	}
 
 	second := []models.HoldingPayload{
 		{Ticker: "PETR4", Quantity: 20, AveragePrice: 35.0, Broker: "Clear", AssetType: "stock", Currency: "BRL"},
 	}
-	if err := svc.upsertHoldings(ctx, second); err != nil {
+	if err := svc.upsertHoldings(ctx, second, "b3"); err != nil {
 		t.Fatalf("second upsert: %v", err)
 	}
 
@@ -466,7 +466,7 @@ func TestUpsertHoldingsMultiple(t *testing.T) {
 		{Ticker: "VALE3", Quantity: 5, AveragePrice: 100.0, AssetType: "stock", Currency: "BRL"},
 		{Ticker: "KNRI11", Quantity: 20, AveragePrice: 50.0, AssetType: "fii", Currency: "BRL"},
 	}
-	if err := svc.upsertHoldings(ctx, holdings); err != nil {
+	if err := svc.upsertHoldings(ctx, holdings, "b3"); err != nil {
 		t.Fatalf("upsertHoldings: %v", err)
 	}
 
@@ -486,7 +486,7 @@ func TestUpsertHoldingsDefaultCurrency(t *testing.T) {
 	holdings := []models.HoldingPayload{
 		{Ticker: "PETR4", Quantity: 10, AveragePrice: 30.0, AssetType: "stock", Currency: ""},
 	}
-	if err := svc.upsertHoldings(ctx, holdings); err != nil {
+	if err := svc.upsertHoldings(ctx, holdings, "b3"); err != nil {
 		t.Fatalf("upsertHoldings: %v", err)
 	}
 
@@ -508,7 +508,7 @@ func TestUpsertHoldingsPreservesMetadata(t *testing.T) {
 	first := []models.HoldingPayload{
 		{Ticker: "PETR4", Quantity: 10, AveragePrice: 30.0, AssetType: "stock", Currency: "BRL", CompanyName: "PETROBRAS", TaxID: "12345"},
 	}
-	if err := svc.upsertHoldings(ctx, first); err != nil {
+	if err := svc.upsertHoldings(ctx, first, "b3"); err != nil {
 		t.Fatalf("first upsert: %v", err)
 	}
 
@@ -516,7 +516,7 @@ func TestUpsertHoldingsPreservesMetadata(t *testing.T) {
 	second := []models.HoldingPayload{
 		{Ticker: "PETR4", Quantity: 15, AveragePrice: 32.0, AssetType: "stock", Currency: "BRL", CompanyName: "", TaxID: ""},
 	}
-	if err := svc.upsertHoldings(ctx, second); err != nil {
+	if err := svc.upsertHoldings(ctx, second, "b3"); err != nil {
 		t.Fatalf("second upsert: %v", err)
 	}
 
@@ -529,5 +529,61 @@ func TestUpsertHoldingsPreservesMetadata(t *testing.T) {
 	}
 	if companyName != "PETROBRAS" {
 		t.Errorf("company_name: got %q, want PETROBRAS (preserved)", companyName)
+	}
+}
+
+func TestUpsertHoldingsDeletesStaleSameSource(t *testing.T) {
+	svc := newTestServiceWithConfig(t, config.Config{DefaultUserID: 1})
+	ctx := context.Background()
+
+	first := []models.HoldingPayload{
+		{Ticker: "PETR4", Quantity: 10, AveragePrice: 30.0, AssetType: "stock", Currency: "BRL"},
+		{Ticker: "VALE3", Quantity: 5, AveragePrice: 100.0, AssetType: "stock", Currency: "BRL"},
+	}
+	if err := svc.upsertHoldings(ctx, first, "b3"); err != nil {
+		t.Fatalf("first upsert: %v", err)
+	}
+
+	// Simulate selling VALE3 — next import only contains PETR4.
+	second := []models.HoldingPayload{
+		{Ticker: "PETR4", Quantity: 10, AveragePrice: 30.0, AssetType: "stock", Currency: "BRL"},
+	}
+	if err := svc.upsertHoldings(ctx, second, "b3"); err != nil {
+		t.Fatalf("second upsert: %v", err)
+	}
+
+	positions, err := svc.GetPositions(ctx)
+	if err != nil {
+		t.Fatalf("GetPositions: %v", err)
+	}
+	if len(positions) != 1 {
+		t.Fatalf("expected stale VALE3 to be removed, got %d positions", len(positions))
+	}
+	if positions[0].Ticker != "PETR4" {
+		t.Errorf("expected PETR4 retained, got %q", positions[0].Ticker)
+	}
+}
+
+func TestUpsertHoldingsKeepsOtherSources(t *testing.T) {
+	svc := newTestServiceWithConfig(t, config.Config{DefaultUserID: 1})
+	ctx := context.Background()
+
+	// Seed an IBKR position directly.
+	seedFullPosition(t, svc, "AAPL", "stock", 10, 150.0, "", "ibkr", false, -60)
+
+	// B3 import should NOT delete the IBKR position.
+	b3 := []models.HoldingPayload{
+		{Ticker: "PETR4", Quantity: 10, AveragePrice: 30.0, AssetType: "stock", Currency: "BRL"},
+	}
+	if err := svc.upsertHoldings(ctx, b3, "b3"); err != nil {
+		t.Fatalf("upsertHoldings: %v", err)
+	}
+
+	var count int
+	if err := svc.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM positions`).Scan(&count); err != nil {
+		t.Fatalf("count: %v", err)
+	}
+	if count != 2 {
+		t.Errorf("expected both positions to survive across sources, got %d", count)
 	}
 }

@@ -22,10 +22,14 @@ export function BottomNav() {
 
   return (
     <nav
-      className="fixed bottom-0 left-0 right-0 z-20 md:hidden flex justify-center"
-      style={{ paddingBottom: "max(1.25rem, env(safe-area-inset-bottom))" }}
+      className="fixed inset-x-0 bottom-0 z-20 md:hidden flex justify-center"
+      style={{
+        paddingBottom: "max(1.25rem, env(safe-area-inset-bottom))",
+        transform: "translateZ(0)",
+        willChange: "transform",
+      }}
     >
-      <div className="flex items-center gap-2 rounded-full bg-[#0d0f14]/90 px-3 py-2.5 shadow-2xl backdrop-blur border border-white/[0.06]">
+      <div className="flex items-center gap-2 rounded-full bg-[#0d0f14] px-3 py-2.5 shadow-2xl border border-white/[0.06]">
         {ITEMS.map((item) => {
           const active = pathname === item.href;
           const pending = pendingHref === item.href && !active;
