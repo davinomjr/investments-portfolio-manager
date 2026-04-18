@@ -222,6 +222,15 @@ func (s *Service) getUSDToBRL(ctx context.Context) float64 {
 }
 
 func (s *Service) fetchUSDToBRL(ctx context.Context) (float64, error) {
+	if r, err := s.fetchUSDToBRLAwesome(ctx); err == nil {
+		return r, nil
+	} else {
+		log.Printf("usd-brl awesomeapi failed: %v; trying frankfurter", err)
+	}
+	return s.fetchUSDToBRLFrankfurter(ctx)
+}
+
+func (s *Service) fetchUSDToBRLAwesome(ctx context.Context) (float64, error) {
 	type awesomeResp struct {
 		USDBRL struct {
 			Bid string `json:"bid"`
@@ -247,6 +256,33 @@ func (s *Service) fetchUSDToBRL(ctx context.Context) (float64, error) {
 	if err != nil {
 		return 0, err
 	}
+	if rate <= 0 {
+		return 0, fmt.Errorf("non-positive rate %v", rate)
+	}
+	return rate, nil
+}
+
+func (s *Service) fetchUSDToBRLFrankfurter(ctx context.Context) (float64, error) {
+	type frankfurterResp struct {
+		Rates map[string]float64 `json:"rates"`
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://api.frankfurter.dev/v1/latest?from=USD&to=BRL", nil)
+	if err != nil {
+		return 0, err
+	}
+	resp, err := s.Client.Do(req)
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		return 0, fmt.Errorf("status %d", resp.StatusCode)
+	}
+	var data frankfurterResp
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		return 0, err
+	}
+	rate := data.Rates["BRL"]
 	if rate <= 0 {
 		return 0, fmt.Errorf("non-positive rate %v", rate)
 	}
