@@ -153,6 +153,24 @@ func (s *Service) ImportFile(ctx context.Context, file multipart.File, filename 
 	return s.updateJob(ctx, jobID, "completed", fmt.Sprintf("Imported %d positions from %s", len(holdings), filename))
 }
 
+// ImportPush persists holdings supplied by a remote pusher (typically a
+// local cron that runs the B3 worker on a developer's machine and POSTs the
+// result here, since the worker can't bypass Cloudflare from Railway).
+func (s *Service) ImportPush(ctx context.Context, holdings []models.HoldingPayload, source string) (models.ImportJobResponse, error) {
+	if source == "" {
+		source = "b3"
+	}
+	jobID, _, err := s.createJob(ctx, source, "running", fmt.Sprintf("Push import started (%d holdings)", len(holdings)))
+	if err != nil {
+		return models.ImportJobResponse{}, err
+	}
+	if err := s.upsertHoldings(ctx, holdings, source); err != nil {
+		updated, _ := s.updateJob(ctx, jobID, "failed", err.Error())
+		return updated, nil
+	}
+	return s.updateJob(ctx, jobID, "completed", fmt.Sprintf("Pushed %d positions from %s", len(holdings), source))
+}
+
 func (s *Service) GetPositions(ctx context.Context) ([]models.PositionResponse, error) {
 	rows, err := s.DB.QueryContext(ctx, `
 		SELECT a.ticker, a.asset_type, p.quantity, p.avg_price, a.currency, COALESCE(p.broker,''), p.source, p.last_updated, p.hidden

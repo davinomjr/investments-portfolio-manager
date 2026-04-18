@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"crypto/subtle"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -9,6 +10,7 @@ import (
 
 	"investments-portfolio-manager/backend/internal/auth"
 	"investments-portfolio-manager/backend/internal/config"
+	"investments-portfolio-manager/backend/internal/models"
 	"investments-portfolio-manager/backend/internal/services"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -26,6 +28,10 @@ func New(svc *services.Service, cfg config.Config) http.Handler {
 	mux.HandleFunc("GET /health", server.handleHealth)
 	mux.HandleFunc("POST /auth/login", server.handleLogin)
 	mux.HandleFunc("POST /auth/logout", server.handleLogout)
+
+	// Bearer-token authenticated route for machine-to-machine pushes from a
+	// developer's local worker (where B3 sync still works).
+	mux.Handle("POST /portfolio/import-push", server.withPushToken(http.HandlerFunc(server.handleImportPush)))
 
 	// Authenticated routes
 	authed := http.NewServeMux()
@@ -91,6 +97,28 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 		MaxAge:   -1,
 	})
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) withPushToken(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		expected := s.Config.PushToken
+		if expected == "" {
+			writeErr(w, "push endpoint disabled (PUSH_TOKEN not configured)", http.StatusServiceUnavailable)
+			return
+		}
+		header := r.Header.Get("Authorization")
+		const prefix = "Bearer "
+		if !strings.HasPrefix(header, prefix) {
+			writeErr(w, "missing bearer token", http.StatusUnauthorized)
+			return
+		}
+		provided := strings.TrimPrefix(header, prefix)
+		if subtle.ConstantTimeCompare([]byte(provided), []byte(expected)) != 1 {
+			writeErr(w, "invalid push token", http.StatusUnauthorized)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func (s *Server) withAuth(next http.Handler) http.Handler {
@@ -205,6 +233,23 @@ func (s *Server) handleImportFile(w http.ResponseWriter, r *http.Request) {
 	}
 	resp, err := s.Service.ImportFile(r.Context(), file, header.Filename)
 	writeJSON(w, resp, err, http.StatusAccepted)
+}
+
+func (s *Server) handleImportPush(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Holdings []models.HoldingPayload `json:"holdings"`
+		Source   string                  `json:"source"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeErr(w, "invalid request body: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	if len(body.Holdings) == 0 {
+		writeErr(w, "holdings array is required and must be non-empty", http.StatusBadRequest)
+		return
+	}
+	resp, err := s.Service.ImportPush(r.Context(), body.Holdings, body.Source)
+	writeJSON(w, resp, err, http.StatusOK)
 }
 
 func (s *Server) handleImportIBKR(w http.ResponseWriter, r *http.Request) {
