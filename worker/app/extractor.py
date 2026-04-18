@@ -218,6 +218,7 @@ class B3PortfolioExtractor:
                     if attempt < 3:
                         page.wait_for_timeout(5000)
                         continue
+                    self._dump_debug_context(page, reason="positions-requires-login")
                     raise SessionExpiredError("B3 login required to refresh session.")
 
                 # The B3 SPA sometimes redirects back to the homepage before the
@@ -226,6 +227,7 @@ class B3PortfolioExtractor:
                     if attempt < 3:
                         page.wait_for_timeout(5000)
                         continue
+                    self._dump_debug_context(page, reason="positions-redirected-away")
                     raise RuntimeError(
                         f"B3 SPA redirected away from positions page (landed on {page.url!r})."
                     )
@@ -278,16 +280,7 @@ class B3PortfolioExtractor:
                 break
 
         if rows is None:
-            # Save a screenshot and HTML dump so we can diagnose portal changes.
-            try:
-                shot = self.download_dir / "b3_debug_screenshot.png"
-                dump = self.download_dir / "b3_debug_page.html"
-                page.screenshot(path=str(shot), full_page=True)
-                dump.write_text(page.content(), encoding="utf-8")
-                import sys
-                print(f"[debug] screenshot → {shot}  html → {dump}", file=sys.stderr)
-            except Exception:
-                pass
+            self._dump_debug_context(page, reason="no-table-found")
             raise RuntimeError("Could not find a holdings table or downloadable CSV in the B3 portal.")
 
         holdings: list[Holding] = []
@@ -312,6 +305,60 @@ class B3PortfolioExtractor:
                 )
             )
         return holdings
+
+    def _dump_debug_context(self, page: "Page", *, reason: str) -> None:
+        """Print diagnostic info to stderr so it surfaces in Railway logs.
+
+        Also writes a screenshot + HTML dump into the download dir for local
+        runs, but the stderr output is what matters on Railway where the
+        container filesystem isn't easily accessible.
+        """
+        import sys
+
+        def log(msg: str) -> None:
+            print(f"[b3-debug] {msg}", file=sys.stderr)
+
+        log(f"reason={reason}")
+        try:
+            log(f"url={page.url}")
+        except Exception as exc:
+            log(f"url=<error: {exc}>")
+        try:
+            log(f"title={page.title()!r}")
+        except Exception as exc:
+            log(f"title=<error: {exc}>")
+        try:
+            html = page.content()
+            log(f"html_length={len(html)}")
+            # Heuristic markers so we can tell what page we're actually on.
+            markers = {
+                "cloudflare": "cloudflare" in html.lower() or "cf-chl" in html.lower(),
+                "challenge": "just a moment" in html.lower() or "checking your browser" in html.lower(),
+                "cpf_input": "placeholder=\"CPF\"" in html or "CPF" in html,
+                "password_input": "type=\"password\"" in html,
+                "baixar_button": "BAIXAR" in html or "Baixar" in html,
+                "posicao_header": "Posição" in html or "posicao" in html.lower(),
+                "custody_table": "custody" in html.lower(),
+            }
+            log(f"markers={markers}")
+            # Print the visible text (first 500 chars) so we can tell what the
+            # user would see. Falls back silently if body_text() is unavailable.
+            try:
+                body_text = page.locator("body").inner_text(timeout=2000).strip()
+                log(f"body_text_preview={body_text[:500]!r}")
+            except Exception:
+                pass
+        except Exception as exc:
+            log(f"html=<error: {exc}>")
+
+        try:
+            shot = self.download_dir / "b3_debug_screenshot.png"
+            dump = self.download_dir / "b3_debug_page.html"
+            page.screenshot(path=str(shot), full_page=True)
+            dump.write_text(page.content(), encoding="utf-8")
+            log(f"screenshot={shot} html_dump={dump}")
+        except Exception as exc:
+            log(f"dump_failed={exc}")
 
     def _requires_login(self, page: "Page") -> bool:
         if "/login" in page.url:
