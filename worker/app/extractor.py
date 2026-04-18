@@ -278,6 +278,16 @@ class B3PortfolioExtractor:
                 break
 
         if rows is None:
+            # Save a screenshot and HTML dump so we can diagnose portal changes.
+            try:
+                shot = self.download_dir / "b3_debug_screenshot.png"
+                dump = self.download_dir / "b3_debug_page.html"
+                page.screenshot(path=str(shot), full_page=True)
+                dump.write_text(page.content(), encoding="utf-8")
+                import sys
+                print(f"[debug] screenshot → {shot}  html → {dump}", file=sys.stderr)
+            except Exception:
+                pass
             raise RuntimeError("Could not find a holdings table or downloadable CSV in the B3 portal.")
 
         holdings: list[Holding] = []
