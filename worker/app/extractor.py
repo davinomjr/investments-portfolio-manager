@@ -166,16 +166,47 @@ class B3PortfolioExtractor:
         except TimeoutError as exc:
             raise SessionExpiredError("Auto-login failed — password field not found.") from exc
 
+        # B3 sometimes throws an email 2FA challenge after CPF+password. Pause
+        # for an out-of-band code drop at /tmp/b3-2fa-code so the worker can be
+        # driven from a remote session where stdin isn't available.
         try:
-            # Wait until we land on the B3 portal with actual content loaded
-            # (not the blank intermediate OAuth redirect page).
             page.wait_for_function(
-                "() => window.location.hostname.includes('investidor.b3.com.br') "
+                "() => document.title.includes('Código de autenticação') "
+                "|| (window.location.hostname.includes('investidor.b3.com.br') "
                 "&& !window.location.href.includes('/login') "
                 "&& !window.location.hostname.includes('b2clogin') "
-                "&& document.body && document.body.innerText.trim().length > 100",
+                "&& document.body && document.body.innerText.trim().length > 100)",
                 timeout=60000,
             )
+            if "Código de autenticação" in (page.title() or ""):
+                from pathlib import Path as _P
+                import sys as _sys
+                import time as _t
+                code_file = _P("/tmp/b3-2fa-code")
+                if code_file.exists():
+                    code_file.unlink()
+                print("[b3-2fa] waiting for /tmp/b3-2fa-code (max 5 min)…", file=_sys.stderr, flush=True)
+                deadline = _t.time() + 300
+                while _t.time() < deadline and not code_file.exists():
+                    _t.sleep(2)
+                if not code_file.exists():
+                    raise SessionExpiredError("2FA code was not provided in time.")
+                code = code_file.read_text().strip()
+                code_file.unlink()
+                print(f"[b3-2fa] entering code ({len(code)} digits)…", file=_sys.stderr, flush=True)
+                code_input = page.locator("input:visible").first
+                code_input.click()
+                code_input.press_sequentially(code, delay=80)
+                page.wait_for_timeout(500)
+                page.keyboard.press("Enter")
+
+                page.wait_for_function(
+                    "() => window.location.hostname.includes('investidor.b3.com.br') "
+                    "&& !window.location.href.includes('/login') "
+                    "&& !window.location.hostname.includes('b2clogin') "
+                    "&& document.body && document.body.innerText.trim().length > 100",
+                    timeout=60000,
+                )
             # If the "Já baixou o App B3?" popup is present, dismiss it
             try:
                 page.locator("text=Já baixou o App B3").wait_for(state="visible", timeout=5000)
@@ -195,6 +226,7 @@ class B3PortfolioExtractor:
             self.session_file.parent.mkdir(parents=True, exist_ok=True)
             context.storage_state(path=str(self.session_file))
         except TimeoutError as exc:
+            self._dump_debug_context(page, reason="auto-login-no-redirect")
             raise SessionExpiredError("Auto-login failed — did not redirect to portfolio.") from exc
 
     def _open_positions_page(self, page: "Page") -> None:
