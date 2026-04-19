@@ -528,9 +528,20 @@ func (s *Service) GetTickerSentiment(ctx context.Context, ticker string) (*model
 	return sentiment, nil
 }
 
-func (s *Service) GetLatestImportJob(ctx context.Context) (models.ImportJobResponse, error) {
+func (s *Service) GetLatestImportJob(ctx context.Context, sources []string) (models.ImportJobResponse, error) {
 	var resp models.ImportJobResponse
-	err := s.DB.QueryRowContext(ctx, `SELECT id, source, status, COALESCE(detail,''), created_at, updated_at FROM import_jobs ORDER BY id DESC LIMIT 1`).
+	query := `SELECT id, source, status, COALESCE(detail,''), created_at, updated_at FROM import_jobs`
+	args := []any{}
+	if len(sources) > 0 {
+		placeholders := strings.Repeat("?,", len(sources))
+		placeholders = placeholders[:len(placeholders)-1]
+		query += " WHERE source IN (" + placeholders + ")"
+		for _, src := range sources {
+			args = append(args, src)
+		}
+	}
+	query += " ORDER BY id DESC LIMIT 1"
+	err := s.DB.QueryRowContext(ctx, query, args...).
 		Scan(&resp.ID, &resp.Source, &resp.Status, &resp.Detail, &resp.CreatedAt, &resp.UpdatedAt)
 	if err != nil {
 		return models.ImportJobResponse{}, err

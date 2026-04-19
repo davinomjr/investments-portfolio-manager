@@ -27,12 +27,20 @@ function formatTimestamp(iso: string): string {
   }
 }
 
-function ImportStatusBadge({ job }: { job: ImportJobResponse }) {
+function ImportStatusBadge({ label, job }: { label: string; job: ImportJobResponse | null }) {
+  if (!job) {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 text-xs font-medium text-white/55">
+        <span className="h-1.5 w-1.5 rounded-full bg-white/40" />
+        {label}: never synced
+      </span>
+    );
+  }
   if (job.status === "completed") {
     return (
       <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 px-3 py-1 text-xs font-medium text-emerald-400">
         <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-        Last synced: {formatTimestamp(job.updated_at)}
+        {label} synced: {formatTimestamp(job.updated_at)}
       </span>
     );
   }
@@ -40,7 +48,7 @@ function ImportStatusBadge({ job }: { job: ImportJobResponse }) {
     return (
       <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/15 px-3 py-1 text-xs font-medium text-amber-400">
         <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
-        Session expired — re-authenticate via B3 sync
+        {label}: session expired — re-authenticate
       </span>
     );
   }
@@ -48,19 +56,25 @@ function ImportStatusBadge({ job }: { job: ImportJobResponse }) {
     return (
       <span className="inline-flex items-center gap-1.5 rounded-full bg-red-500/15 px-3 py-1 text-xs font-medium text-red-400">
         <span className="h-1.5 w-1.5 rounded-full bg-red-400" />
-        Last import failed: {job.detail ?? "unknown error"}
+        {label} import failed: {job.detail ?? "unknown error"}
       </span>
     );
   }
   return (
     <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 text-xs font-medium text-white/55">
       <span className="h-1.5 w-1.5 rounded-full bg-white/40" />
-      Status: {job.status}
+      {label}: {job.status}
     </span>
   );
 }
 
-export function UploadPanel({ latestJob }: { latestJob?: ImportJobResponse | null }) {
+export function UploadPanel({
+  latestB3Job,
+  latestIbkrJob,
+}: {
+  latestB3Job?: ImportJobResponse | null;
+  latestIbkrJob?: ImportJobResponse | null;
+}) {
   const router = useRouter();
   const [activeMethod, setActiveMethod] = useState<ImportMethod>("upload");
   const [message, setMessage] = useState<string | null>(null);
@@ -179,7 +193,10 @@ export function UploadPanel({ latestJob }: { latestJob?: ImportJobResponse | nul
           <p className="text-xs uppercase tracking-[0.3em] text-white/55">Import</p>
           <h2 className="mt-2 text-xl font-semibold md:text-2xl">Import positions</h2>
         </div>
-        {latestJob ? <ImportStatusBadge job={latestJob} /> : null}
+        <div className="flex flex-col items-start gap-2 sm:items-end">
+          <ImportStatusBadge label="B3" job={latestB3Job ?? null} />
+          <ImportStatusBadge label="IBKR" job={latestIbkrJob ?? null} />
+        </div>
       </div>
 
       <div
