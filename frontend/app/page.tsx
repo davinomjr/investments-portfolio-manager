@@ -41,11 +41,10 @@ export default async function HomePage() {
         <div>
           <p className="text-xs uppercase tracking-[0.4em] text-white/55">Portfolio</p>
           <h1 className="mt-3 max-w-3xl text-3xl font-semibold leading-tight sm:text-4xl md:mt-4 md:text-5xl">
-            Visualize imported B3 and IBKR positions before you start building scenarios.
+            Track B3 and IBKR holdings in one place.
           </h1>
           <p className="mt-3 max-w-2xl text-base text-white/65 md:mt-4 md:text-lg">
-            Upload a B3 or IBKR export, inspect normalized holdings, and review allocation weight before running your
-            Monte Carlo scenarios.
+            Import positions, review allocation weight, and stress-test your portfolio with Monte Carlo.
           </p>
         </div>
         <div className="hidden rounded-[2rem] border border-white/20 bg-white/10 p-6 shadow-[0_24px_80px_rgba(0,0,0,0.4)] md:block">
