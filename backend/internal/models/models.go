@@ -11,6 +11,7 @@ type ImportJobResponse struct {
 
 type PositionResponse struct {
 	Ticker      string  `json:"ticker"`
+	CompanyName string  `json:"company_name,omitempty"`
 	AssetType   string  `json:"asset_type"`
 	Quantity    float64 `json:"quantity"`
 	AvgPrice    float64 `json:"avg_price"`
@@ -23,6 +24,7 @@ type PositionResponse struct {
 
 type AllocationItem struct {
 	Ticker      string  `json:"ticker"`
+	CompanyName string  `json:"company_name,omitempty"`
 	AssetType   string  `json:"asset_type"`
 	MarketValue float64 `json:"market_value"`
 	Weight      float64 `json:"weight"`

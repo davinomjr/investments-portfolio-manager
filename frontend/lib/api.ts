@@ -1,5 +1,6 @@
 export type Position = {
   ticker: string;
+  company_name?: string;
   asset_type: string;
   quantity: number;
   avg_price: number;
@@ -12,6 +13,7 @@ export type Position = {
 
 export type Allocation = {
   ticker: string;
+  company_name?: string;
   asset_type: string;
   market_value: number;
   weight: number;

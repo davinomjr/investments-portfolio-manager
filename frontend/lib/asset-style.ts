@@ -90,3 +90,16 @@ const ASSET_STYLES: Record<
 export function getAssetStyle(assetType: string) {
   return ASSET_STYLES[assetType] ?? ASSET_STYLES.other;
 }
+
+const FRIENDLY_LABEL_TYPES = new Set(["government_bond", "other", "fund"]);
+
+export function formatHoldingLabel(
+  ticker: string,
+  companyName: string | null | undefined,
+  assetType: string,
+): string {
+  if (!FRIENDLY_LABEL_TYPES.has(assetType)) return ticker;
+  const name = (companyName ?? "").trim();
+  if (!name) return ticker;
+  return name.replace(/\s+com\s+Juros\s+Semestrais/i, "").trim();
+}

@@ -173,9 +173,10 @@ func (s *Service) ImportPush(ctx context.Context, holdings []models.HoldingPaylo
 
 func (s *Service) GetPositions(ctx context.Context) ([]models.PositionResponse, error) {
 	rows, err := s.DB.QueryContext(ctx, `
-		SELECT a.ticker, a.asset_type, p.quantity, p.avg_price, a.currency, COALESCE(p.broker,''), p.source, p.last_updated, p.hidden
+		SELECT a.ticker, COALESCE(am.company_name,''), a.asset_type, p.quantity, p.avg_price, a.currency, COALESCE(p.broker,''), p.source, p.last_updated, p.hidden
 		FROM positions p
 		JOIN assets a ON a.id = p.asset_id
+		LEFT JOIN asset_metadata am ON am.asset_id = a.id
 		ORDER BY datetime(p.last_updated) DESC`)
 	if err != nil {
 		return nil, err
@@ -184,7 +185,7 @@ func (s *Service) GetPositions(ctx context.Context) ([]models.PositionResponse, 
 	out := make([]models.PositionResponse, 0)
 	for rows.Next() {
 		var item models.PositionResponse
-		if err := rows.Scan(&item.Ticker, &item.AssetType, &item.Quantity, &item.AvgPrice, &item.Currency, &item.Broker, &item.Source, &item.LastUpdated, &item.Hidden); err != nil {
+		if err := rows.Scan(&item.Ticker, &item.CompanyName, &item.AssetType, &item.Quantity, &item.AvgPrice, &item.Currency, &item.Broker, &item.Source, &item.LastUpdated, &item.Hidden); err != nil {
 			return nil, err
 		}
 		out = append(out, item)
@@ -309,9 +310,10 @@ func (s *Service) fetchUSDToBRLFrankfurter(ctx context.Context) (float64, error)
 
 func (s *Service) GetPortfolio(ctx context.Context) (models.PortfolioResponse, error) {
 	rows, err := s.DB.QueryContext(ctx, `
-		SELECT a.ticker, a.asset_type, p.quantity, p.avg_price, a.currency
+		SELECT a.ticker, COALESCE(am.company_name,''), a.asset_type, p.quantity, p.avg_price, a.currency
 		FROM positions p
-		JOIN assets a ON a.id = p.asset_id`)
+		JOIN assets a ON a.id = p.asset_id
+		LEFT JOIN asset_metadata am ON am.asset_id = a.id`)
 	if err != nil {
 		return models.PortfolioResponse{}, err
 	}
@@ -320,17 +322,18 @@ func (s *Service) GetPortfolio(ctx context.Context) (models.PortfolioResponse, e
 	usdToBRL := s.getUSDToBRL(ctx)
 
 	type alloc struct {
-		assetType string
-		value     float64
+		companyName string
+		assetType   string
+		value       float64
 	}
 	allocByTicker := map[string]alloc{}
 	total := 0.0
 	count := 0
 	for rows.Next() {
 		count++
-		var ticker, assetType, currency string
+		var ticker, companyName, assetType, currency string
 		var qty, price float64
-		if err := rows.Scan(&ticker, &assetType, &qty, &price, &currency); err != nil {
+		if err := rows.Scan(&ticker, &companyName, &assetType, &qty, &price, &currency); err != nil {
 			return models.PortfolioResponse{}, err
 		}
 		value := qty * price
@@ -338,7 +341,7 @@ func (s *Service) GetPortfolio(ctx context.Context) (models.PortfolioResponse, e
 			value *= usdToBRL
 		}
 		total += value
-		allocByTicker[ticker] = alloc{assetType: assetType, value: value}
+		allocByTicker[ticker] = alloc{companyName: companyName, assetType: assetType, value: value}
 	}
 	allocations := make([]models.AllocationItem, 0, len(allocByTicker))
 	for ticker, item := range allocByTicker {
@@ -347,7 +350,7 @@ func (s *Service) GetPortfolio(ctx context.Context) (models.PortfolioResponse, e
 			weight = item.value / total
 		}
 		allocations = append(allocations, models.AllocationItem{
-			Ticker: ticker, AssetType: item.assetType, MarketValue: item.value, Weight: weight,
+			Ticker: ticker, CompanyName: item.companyName, AssetType: item.assetType, MarketValue: item.value, Weight: weight,
 		})
 	}
 	sort.Slice(allocations, func(i, j int) bool { return allocations[i].MarketValue > allocations[j].MarketValue })
@@ -656,7 +659,19 @@ func (s *Service) runWorkerWithEnv(ctx context.Context, args []string, extraEnv 
 	return payload.Holdings, nil
 }
 
+var importTickerDenylist = map[string]struct{}{
+	"CDB4268T1LL": {},
+}
+
 func (s *Service) upsertHoldings(ctx context.Context, holdings []models.HoldingPayload, source string) error {
+	filtered := make([]models.HoldingPayload, 0, len(holdings))
+	for _, h := range holdings {
+		if _, skip := importTickerDenylist[h.Ticker]; skip {
+			continue
+		}
+		filtered = append(filtered, h)
+	}
+	holdings = filtered
 	if len(holdings) == 0 {
 		return nil
 	}
