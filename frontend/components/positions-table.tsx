@@ -134,7 +134,7 @@ export function PositionsTable({ positions }: { positions: Position[] }) {
                   </td>
                   <td className="px-3 py-2.5 md:px-4 md:py-3">{visible ? position.quantity : "**"}</td>
                   <td className="hidden px-3 py-2.5 sm:table-cell md:px-4 md:py-3">{visible ? formatCurrency(position.avg_price, position.currency) : "**"}</td>
-                  <td className="rounded-r-2xl px-3 py-2.5 md:px-4 md:py-3">{visible ? formatCurrency(position.quantity * position.avg_price, position.currency) : "**"}</td>
+                  <td className="rounded-r-2xl px-3 py-2.5 md:px-4 md:py-3">{visible ? formatCurrency(position.market_value_brl, "BRL") : "**"}</td>
                 </tr>
               ))}
             </tbody>
