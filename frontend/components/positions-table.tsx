@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useMemo, useState } from "react";
 import type { Position } from "@/lib/api";
 import { formatHoldingLabel, getAssetStyle } from "@/lib/asset-style";
 import { useVisibility } from "@/components/visibility-context";
@@ -14,15 +15,82 @@ function formatCurrency(value: number, currency = "BRL") {
   }).format(value);
 }
 
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat("pt-BR", {
-    dateStyle: "short",
-    timeStyle: "short",
-  }).format(new Date(value));
+type SortKey = "ticker" | "type" | "qty" | "price" | "value";
+type SortDir = "asc" | "desc";
+
+const NUMERIC_KEYS: ReadonlySet<SortKey> = new Set(["qty", "price", "value"]);
+
+function positionSortValue(position: Position, key: SortKey): number | string {
+  switch (key) {
+    case "ticker":
+      return formatHoldingLabel(position.ticker, position.company_name, position.asset_type).toLowerCase();
+    case "type":
+      return getAssetStyle(position.asset_type).label.toLowerCase();
+    case "qty":
+      return position.quantity;
+    case "price":
+      return position.avg_price;
+    case "value":
+      return position.quantity * position.avg_price;
+  }
+}
+
+function SortHeader({
+  label,
+  sortKey,
+  activeKey,
+  activeDir,
+  onSort,
+  className,
+}: {
+  label: string;
+  sortKey: SortKey;
+  activeKey: SortKey;
+  activeDir: SortDir;
+  onSort: (key: SortKey) => void;
+  className?: string;
+}) {
+  const isActive = activeKey === sortKey;
+  const arrow = isActive ? (activeDir === "asc" ? "↑" : "↓") : "";
+  return (
+    <th className={className} aria-sort={isActive ? (activeDir === "asc" ? "ascending" : "descending") : "none"}>
+      <button
+        type="button"
+        onClick={() => onSort(sortKey)}
+        className={`flex items-center gap-1 uppercase tracking-wider transition-colors hover:text-white/90 ${isActive ? "text-white" : ""}`}
+      >
+        <span>{label}</span>
+        <span className="w-3 text-xs">{arrow}</span>
+      </button>
+    </th>
+  );
 }
 
 export function PositionsTable({ positions }: { positions: Position[] }) {
   const { visible } = useVisibility();
+  const [sortKey, setSortKey] = useState<SortKey>("value");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
+
+  const handleSort = (key: SortKey) => {
+    if (key === sortKey) {
+      setSortDir((dir) => (dir === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir(NUMERIC_KEYS.has(key) ? "desc" : "asc");
+    }
+  };
+
+  const sortedPositions = useMemo(() => {
+    const copy = [...positions];
+    copy.sort((a, b) => {
+      const av = positionSortValue(a, sortKey);
+      const bv = positionSortValue(b, sortKey);
+      if (av < bv) return sortDir === "asc" ? -1 : 1;
+      if (av > bv) return sortDir === "asc" ? 1 : -1;
+      return 0;
+    });
+    return copy;
+  }, [positions, sortKey, sortDir]);
 
   return (
     <section className="rounded-[2rem] border border-white/15 bg-[#222530] p-4 md:p-6">
@@ -34,15 +102,15 @@ export function PositionsTable({ positions }: { positions: Position[] }) {
           <table className="min-w-full border-separate border-spacing-y-2 text-left text-sm">
             <thead className="text-white/50">
               <tr>
-                <th className="pb-2 pr-4">Ticker</th>
-                <th className="hidden pb-2 pr-4 sm:table-cell">Type</th>
-                <th className="pb-2 pr-4">Qty</th>
-                <th className="hidden pb-2 pr-4 sm:table-cell">Avg/Close</th>
-                <th className="pb-2 pr-4">Value</th>
+                <SortHeader label="Ticker" sortKey="ticker" activeKey={sortKey} activeDir={sortDir} onSort={handleSort} className="pb-2 pr-4" />
+                <SortHeader label="Type" sortKey="type" activeKey={sortKey} activeDir={sortDir} onSort={handleSort} className="hidden pb-2 pr-4 sm:table-cell" />
+                <SortHeader label="Qty" sortKey="qty" activeKey={sortKey} activeDir={sortDir} onSort={handleSort} className="pb-2 pr-4" />
+                <SortHeader label="Avg/Close" sortKey="price" activeKey={sortKey} activeDir={sortDir} onSort={handleSort} className="hidden pb-2 pr-4 sm:table-cell" />
+                <SortHeader label="Value" sortKey="value" activeKey={sortKey} activeDir={sortDir} onSort={handleSort} className="pb-2 pr-4" />
               </tr>
             </thead>
             <tbody>
-              {positions.map((position) => (
+              {sortedPositions.map((position) => (
                 <tr key={position.ticker} className="rounded-2xl border border-white/10 bg-[#272a36]">
                   <td className="rounded-l-2xl px-3 py-2.5 font-semibold md:px-4 md:py-3">
                     <Link
