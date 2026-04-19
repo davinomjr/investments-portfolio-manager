@@ -62,7 +62,7 @@ function ImportStatusBadge({ job }: { job: ImportJobResponse }) {
 
 export function UploadPanel({ latestJob }: { latestJob?: ImportJobResponse | null }) {
   const router = useRouter();
-  const [activeMethod, setActiveMethod] = useState<ImportMethod>("b3");
+  const [activeMethod, setActiveMethod] = useState<ImportMethod>("upload");
   const [message, setMessage] = useState<string | null>(null);
   const [syncResult, setSyncResult] = useState<string | null>(null);
   const [isSyncing, startSyncTransition] = useTransition();
