@@ -60,3 +60,19 @@ echo
 if [[ "$HTTP_STATUS" != "200" ]]; then
   exit 1
 fi
+
+# IBKR uses Flex Query (plain HTTPS), so Railway can fetch it directly —
+# trigger the backend to run its own IBKR sync alongside the B3 push.
+if [[ -n "${IBKR_TRIGGER_URL:-}" ]]; then
+  echo "[push] triggering IBKR sync at $IBKR_TRIGGER_URL …" >&2
+  IBKR_STATUS="$(curl --silent --show-error --output /tmp/push-ibkr-response.json \
+    --write-out '%{http_code}' \
+    -X POST "$IBKR_TRIGGER_URL" \
+    -H "Authorization: Bearer $PUSH_TOKEN")"
+  echo "[push] IBKR HTTP $IBKR_STATUS" >&2
+  cat /tmp/push-ibkr-response.json
+  echo
+  if [[ "$IBKR_STATUS" != "202" && "$IBKR_STATUS" != "200" ]]; then
+    exit 1
+  fi
+fi
