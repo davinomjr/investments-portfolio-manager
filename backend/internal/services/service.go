@@ -182,12 +182,18 @@ func (s *Service) GetPositions(ctx context.Context) ([]models.PositionResponse, 
 		return nil, err
 	}
 	defer rows.Close()
+	usdToBRL := s.getUSDToBRL(ctx)
 	out := make([]models.PositionResponse, 0)
 	for rows.Next() {
 		var item models.PositionResponse
 		if err := rows.Scan(&item.Ticker, &item.CompanyName, &item.AssetType, &item.Quantity, &item.AvgPrice, &item.Currency, &item.Broker, &item.Source, &item.LastUpdated, &item.Hidden); err != nil {
 			return nil, err
 		}
+		value := item.Quantity * item.AvgPrice
+		if item.Currency == "USD" {
+			value *= usdToBRL
+		}
+		item.MarketValueBRL = value
 		out = append(out, item)
 	}
 	return out, rows.Err()

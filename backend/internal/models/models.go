@@ -10,16 +10,17 @@ type ImportJobResponse struct {
 }
 
 type PositionResponse struct {
-	Ticker      string  `json:"ticker"`
-	CompanyName string  `json:"company_name,omitempty"`
-	AssetType   string  `json:"asset_type"`
-	Quantity    float64 `json:"quantity"`
-	AvgPrice    float64 `json:"avg_price"`
-	Currency    string  `json:"currency"`
-	Broker      string  `json:"broker,omitempty"`
-	Source      string  `json:"source"`
-	LastUpdated string  `json:"last_updated"`
-	Hidden      bool    `json:"hidden"`
+	Ticker         string  `json:"ticker"`
+	CompanyName    string  `json:"company_name,omitempty"`
+	AssetType      string  `json:"asset_type"`
+	Quantity       float64 `json:"quantity"`
+	AvgPrice       float64 `json:"avg_price"`
+	Currency       string  `json:"currency"`
+	Broker         string  `json:"broker,omitempty"`
+	Source         string  `json:"source"`
+	LastUpdated    string  `json:"last_updated"`
+	Hidden         bool    `json:"hidden"`
+	MarketValueBRL float64 `json:"market_value_brl"`
 }
 
 type AllocationItem struct {

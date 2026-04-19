@@ -9,6 +9,7 @@ export type Position = {
   source: string;
   last_updated: string;
   hidden: boolean;
+  market_value_brl: number;
 };
 
 export type Allocation = {

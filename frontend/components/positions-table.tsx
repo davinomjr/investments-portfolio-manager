@@ -31,7 +31,7 @@ function positionSortValue(position: Position, key: SortKey): number | string {
     case "price":
       return position.avg_price;
     case "value":
-      return position.quantity * position.avg_price;
+      return position.market_value_brl;
   }
 }
 
