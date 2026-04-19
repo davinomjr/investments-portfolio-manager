@@ -6,6 +6,14 @@ import type { ImportJobResponse } from "@/lib/api";
 
 const API_BASE = (process.env.NEXT_PUBLIC_BASE_PATH ?? "") + (process.env.NEXT_PUBLIC_API_BASE_URL ?? "/api");
 
+type ImportMethod = "upload" | "b3" | "ibkr";
+
+const TABS: { id: ImportMethod; label: string; shortLabel: string }[] = [
+  { id: "upload", label: "Upload file", shortLabel: "Upload" },
+  { id: "b3", label: "B3 sync", shortLabel: "B3" },
+  { id: "ibkr", label: "IBKR sync", shortLabel: "IBKR" },
+];
+
 function formatTimestamp(iso: string): string {
   try {
     return new Intl.DateTimeFormat("en-US", {
@@ -32,7 +40,7 @@ function ImportStatusBadge({ job }: { job: ImportJobResponse }) {
     return (
       <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/15 px-3 py-1 text-xs font-medium text-amber-400">
         <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
-        Session expired — click Sync from B3 to re-authenticate
+        Session expired — re-authenticate via B3 sync
       </span>
     );
   }
@@ -54,7 +62,8 @@ function ImportStatusBadge({ job }: { job: ImportJobResponse }) {
 
 export function UploadPanel({ latestJob }: { latestJob?: ImportJobResponse | null }) {
   const router = useRouter();
-  const [message, setMessage] = useState<string>("Upload a B3 `.xlsx` or `.csv` export to refresh positions.");
+  const [activeMethod, setActiveMethod] = useState<ImportMethod>("b3");
+  const [message, setMessage] = useState<string | null>(null);
   const [syncResult, setSyncResult] = useState<string | null>(null);
   const [isSyncing, startSyncTransition] = useTransition();
   const [ibkrResult, setIbkrResult] = useState<string | null>(null);
@@ -103,7 +112,6 @@ export function UploadPanel({ latestJob }: { latestJob?: ImportJobResponse | nul
           setSyncResult(payload.detail ?? "Sync failed.");
           return;
         }
-        // Import runs in the background — poll until it finishes
         setSyncResult("Syncing… this may take a minute.");
         for (let i = 0; i < 60; i++) {
           await new Promise((r) => setTimeout(r, 5000));
@@ -165,62 +173,83 @@ export function UploadPanel({ latestJob }: { latestJob?: ImportJobResponse | nul
   };
 
   return (
-    <section className="rounded-[2rem] border border-white/15 bg-[#222530] p-6 shadow-[0_18px_60px_rgba(0,0,0,0.25)]">
-      {/* Manual file upload row */}
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+    <section className="rounded-[2rem] border border-white/15 bg-[#222530] p-5 shadow-[0_18px_60px_rgba(0,0,0,0.25)] md:p-6">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-xs uppercase tracking-[0.3em] text-white/55">Manual Import</p>
-          <h2 className="mt-2 text-2xl font-semibold">Upload B3 export file</h2>
-          <p className="mt-1 text-sm text-white/65">Upload a `.xlsx` or `.csv` export from B3.</p>
+          <p className="text-xs uppercase tracking-[0.3em] text-white/55">Import</p>
+          <h2 className="mt-2 text-xl font-semibold md:text-2xl">Import positions</h2>
         </div>
-        <label className="inline-flex cursor-pointer items-center justify-center rounded-full border border-white bg-white px-5 py-3 text-sm font-semibold text-[#1a1d25] transition hover:bg-transparent hover:text-white">
-          Select File
-          <input type="file" accept=".xlsx,.xlsm,.csv" onChange={onFileSelect} className="hidden" />
-        </label>
+        {latestJob ? <ImportStatusBadge job={latestJob} /> : null}
       </div>
-      {message && <p className="mt-3 text-sm text-white/65">{message}</p>}
 
-      <hr className="my-5 border-white/10" />
-
-      {/* B3 Sync row */}
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div>
-          <p className="text-xs uppercase tracking-[0.3em] text-white/55">B3 Sync</p>
-          <h2 className="mt-2 text-2xl font-semibold">Sync directly from B3</h2>
-          {latestJob && (
-            <div className="mt-2">
-              <ImportStatusBadge job={latestJob} />
-            </div>
-          )}
-        </div>
-        <button
-          onClick={onSyncB3}
-          disabled={isSyncing}
-          className="inline-flex cursor-pointer items-center justify-center rounded-full border border-white bg-white px-5 py-3 text-sm font-semibold text-[#1a1d25] transition hover:bg-transparent hover:text-white disabled:opacity-50"
-        >
-          {isSyncing ? "Syncing..." : "Sync from B3"}
-        </button>
+      <div
+        role="tablist"
+        aria-label="Import method"
+        className="mt-4 flex w-full rounded-full border border-white/10 bg-black/20 p-1 sm:w-auto sm:self-start"
+      >
+        {TABS.map((tab) => {
+          const isActive = activeMethod === tab.id;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              role="tab"
+              aria-selected={isActive}
+              onClick={() => setActiveMethod(tab.id)}
+              className={`flex-1 rounded-full px-4 py-2 text-sm font-medium transition sm:flex-none ${
+                isActive ? "bg-white text-[#1a1d25]" : "text-white/65 hover:text-white"
+              }`}
+            >
+              <span className="sm:hidden">{tab.shortLabel}</span>
+              <span className="hidden sm:inline">{tab.label}</span>
+            </button>
+          );
+        })}
       </div>
-      {syncResult && <p className="mt-3 text-sm text-white/65">{syncResult}</p>}
 
-      <hr className="my-5 border-white/10" />
+      <div className="mt-5">
+        {activeMethod === "upload" && (
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <p className="text-sm text-white/65">Upload a `.xlsx` or `.csv` export from B3.</p>
+            <label className="inline-flex cursor-pointer items-center justify-center rounded-full border border-white bg-white px-5 py-3 text-sm font-semibold text-[#1a1d25] transition hover:bg-transparent hover:text-white">
+              {isSyncing ? "Uploading..." : "Select file"}
+              <input type="file" accept=".xlsx,.xlsm,.csv" onChange={onFileSelect} className="hidden" disabled={isSyncing} />
+            </label>
+          </div>
+        )}
 
-      {/* IBKR Sync row */}
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div>
-          <p className="text-xs uppercase tracking-[0.3em] text-white/55">IBKR Sync</p>
-          <h2 className="mt-2 text-2xl font-semibold">Sync directly from IBKR</h2>
-        </div>
-        <button
-          onClick={onSyncIBKR}
-          disabled={isIbkrSyncing}
-          className="inline-flex cursor-pointer items-center justify-center rounded-full border border-white bg-white px-5 py-3 text-sm font-semibold text-[#1a1d25] transition hover:bg-transparent hover:text-white disabled:opacity-50"
-        >
-          {isIbkrSyncing ? "Syncing..." : "Sync from IBKR"}
-        </button>
+        {activeMethod === "b3" && (
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <p className="text-sm text-white/65">Sync positions directly from the B3 investor portal.</p>
+            <button
+              type="button"
+              onClick={onSyncB3}
+              disabled={isSyncing}
+              className="inline-flex cursor-pointer items-center justify-center rounded-full border border-white bg-white px-5 py-3 text-sm font-semibold text-[#1a1d25] transition hover:bg-transparent hover:text-white disabled:opacity-50"
+            >
+              {isSyncing ? "Syncing..." : "Sync from B3"}
+            </button>
+          </div>
+        )}
+
+        {activeMethod === "ibkr" && (
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <p className="text-sm text-white/65">Pull the latest positions from your IBKR Flex query.</p>
+            <button
+              type="button"
+              onClick={onSyncIBKR}
+              disabled={isIbkrSyncing}
+              className="inline-flex cursor-pointer items-center justify-center rounded-full border border-white bg-white px-5 py-3 text-sm font-semibold text-[#1a1d25] transition hover:bg-transparent hover:text-white disabled:opacity-50"
+            >
+              {isIbkrSyncing ? "Syncing..." : "Sync from IBKR"}
+            </button>
+          </div>
+        )}
+
+        {activeMethod === "upload" && message ? <p className="mt-3 text-sm text-white/65">{message}</p> : null}
+        {activeMethod === "b3" && syncResult ? <p className="mt-3 text-sm text-white/65">{syncResult}</p> : null}
+        {activeMethod === "ibkr" && ibkrResult ? <p className="mt-3 text-sm text-white/65">{ibkrResult}</p> : null}
       </div>
-      {ibkrResult && <p className="mt-3 text-sm text-white/65">{ibkrResult}</p>}
-
     </section>
   );
 }
