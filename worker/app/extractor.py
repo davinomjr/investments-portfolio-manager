@@ -145,6 +145,7 @@ class B3PortfolioExtractor:
             page.wait_for_timeout(1000)
             page.keyboard.press("Enter")
         except TimeoutError as exc:
+            self._dump_debug_context(page, reason="auto-login-no-cpf-field")
             raise SessionExpiredError("Auto-login failed — CPF field not found.") from exc
 
         try:
@@ -164,6 +165,7 @@ class B3PortfolioExtractor:
             page.wait_for_timeout(1000)
             page.keyboard.press("Enter")
         except TimeoutError as exc:
+            self._dump_debug_context(page, reason="auto-login-no-password-field")
             raise SessionExpiredError("Auto-login failed — password field not found.") from exc
 
         # B3 sometimes throws an email 2FA challenge after CPF+password. Pause
