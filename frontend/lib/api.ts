@@ -164,8 +164,11 @@ export async function fetchFIIResults(): Promise<FIIResultsResponse> {
   return response.json();
 }
 
-export async function fetchLatestImportJob(): Promise<ImportJobResponse | null> {
-  const response = await serverFetch("/portfolio/import-jobs/latest");
+export async function fetchLatestImportJob(sources?: string[]): Promise<ImportJobResponse | null> {
+  const path = sources && sources.length > 0
+    ? `/portfolio/import-jobs/latest?source=${encodeURIComponent(sources.join(","))}`
+    : "/portfolio/import-jobs/latest";
+  const response = await serverFetch(path);
   if (response.status === 404) return null;
   if (!response.ok) throw new Error("Failed to load latest import job.");
   return response.json();

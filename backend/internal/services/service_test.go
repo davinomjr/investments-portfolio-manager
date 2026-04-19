@@ -333,7 +333,7 @@ func TestSetPositionsVisibility(t *testing.T) {
 
 func TestGetLatestImportJobNoRows(t *testing.T) {
 	svc := newTestService(t)
-	_, err := svc.GetLatestImportJob(context.Background())
+	_, err := svc.GetLatestImportJob(context.Background(), nil)
 	if err != sql.ErrNoRows {
 		t.Fatalf("expected sql.ErrNoRows, got %v", err)
 	}
@@ -354,7 +354,7 @@ func TestGetLatestImportJobReturnsMostRecent(t *testing.T) {
 		t.Fatalf("insert job 2: %v", err)
 	}
 
-	resp, err := svc.GetLatestImportJob(ctx)
+	resp, err := svc.GetLatestImportJob(ctx, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -376,7 +376,7 @@ func TestGetLatestImportJobNullDetail(t *testing.T) {
 		t.Fatalf("insert job: %v", err)
 	}
 
-	resp, err := svc.GetLatestImportJob(ctx)
+	resp, err := svc.GetLatestImportJob(ctx, nil)
 	if err != nil {
 		t.Fatalf("unexpected scan error with NULL detail: %v", err)
 	}
