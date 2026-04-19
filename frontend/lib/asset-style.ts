@@ -91,7 +91,7 @@ export function getAssetStyle(assetType: string) {
   return ASSET_STYLES[assetType] ?? ASSET_STYLES.other;
 }
 
-const FRIENDLY_LABEL_TYPES = new Set(["government_bond", "other", "fund"]);
+const FRIENDLY_LABEL_TYPES = new Set(["government_bond", "other"]);
 
 export function formatHoldingLabel(
   ticker: string,
@@ -101,5 +101,5 @@ export function formatHoldingLabel(
   if (!FRIENDLY_LABEL_TYPES.has(assetType)) return ticker;
   const name = (companyName ?? "").trim();
   if (!name) return ticker;
-  return name.replace(/\s+com\s+Juros\s+Semestrais/i, "").trim();
+  return name.replace(/\bcom\s+Juros\s+Semestrais\b/i, "c/ Juros Semestrais").trim();
 }
