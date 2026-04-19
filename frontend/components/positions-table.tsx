@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import type { Position } from "@/lib/api";
-import { getAssetStyle } from "@/lib/asset-style";
+import { formatHoldingLabel, getAssetStyle } from "@/lib/asset-style";
 import { useVisibility } from "@/components/visibility-context";
 
 function formatCurrency(value: number, currency = "BRL") {
@@ -49,7 +49,7 @@ export function PositionsTable({ positions }: { positions: Position[] }) {
                       href={`/results#${position.ticker}`}
                       className="transition-colors hover:text-white/80 hover:underline"
                     >
-                      {position.ticker}
+                      {formatHoldingLabel(position.ticker, position.company_name, position.asset_type)}
                     </Link>
                   </td>
                   <td className="hidden px-3 py-2.5 sm:table-cell md:px-4 md:py-3">

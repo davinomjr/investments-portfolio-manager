@@ -31,7 +31,7 @@ export default async function SimulatorPage() {
         <div>
           <p className="text-xs uppercase tracking-[0.4em] text-white/55">Simulator</p>
           <h1 className="mt-3 max-w-3xl text-3xl font-semibold leading-tight sm:text-4xl md:mt-4 md:text-5xl">
-            Explore Monte Carlo outcomes for your current portfolio cost basis.
+            Explore Monte Carlo outcomes based on your total invested.
           </h1>
           <p className="mt-3 max-w-2xl text-base text-white/65 md:mt-4 md:text-lg">
             This projection uses annualized random return paths and shows percentile bands so you can reason about

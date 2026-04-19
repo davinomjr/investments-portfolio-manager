@@ -1,7 +1,7 @@
 "use client";
 
 import type { Portfolio } from "@/lib/api";
-import { getAssetStyle } from "@/lib/asset-style";
+import { formatHoldingLabel, getAssetStyle } from "@/lib/asset-style";
 import { useVisibility } from "@/components/visibility-context";
 
 function formatCurrency(value: number) {
@@ -20,7 +20,7 @@ export function SummaryCards({ portfolio }: { portfolio: Portfolio }) {
   return (
     <section className="grid gap-3 sm:grid-cols-3 md:gap-4">
       <article className="rounded-[2rem] border border-white/20 bg-white/15 p-4 shadow-[0_20px_60px_rgba(0,0,0,0.4)] md:p-6">
-        <p className="text-xs uppercase tracking-[0.3em] text-white/55">Estimated Cost Basis</p>
+        <p className="text-xs uppercase tracking-[0.3em] text-white/55">Total Invested</p>
         <p className="mt-3 text-3xl font-semibold md:mt-4 md:text-4xl">{visible ? formatCurrency(portfolio.estimated_cost_basis) : "**"}</p>
       </article>
       <article className="rounded-[2rem] border border-white/15 bg-[#222530] p-4 md:p-6">
@@ -31,7 +31,7 @@ export function SummaryCards({ portfolio }: { portfolio: Portfolio }) {
         <p className="text-xs uppercase tracking-[0.3em] text-white/55">Largest Weight</p>
         {largestAllocation ? (
           <>
-            <p className="mt-3 text-2xl font-semibold md:mt-4">{visible ? `${largestAllocation.ticker} ${(largestAllocation.weight * 100).toFixed(1)}%` : "**"}</p>
+            <p className="mt-3 text-2xl font-semibold md:mt-4">{visible ? `${formatHoldingLabel(largestAllocation.ticker, largestAllocation.company_name, largestAllocation.asset_type)} ${(largestAllocation.weight * 100).toFixed(1)}%` : "**"}</p>
             <span
               className="mt-3 inline-flex rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em]"
               style={{
