@@ -29,9 +29,11 @@ func New(svc *services.Service, cfg config.Config) http.Handler {
 	mux.HandleFunc("POST /auth/login", server.handleLogin)
 	mux.HandleFunc("POST /auth/logout", server.handleLogout)
 
-	// Bearer-token authenticated route for machine-to-machine pushes from a
-	// developer's local worker (where B3 sync still works).
+	// Bearer-token authenticated routes for machine-to-machine calls from the
+	// developer's local worker. IBKR runs entirely on Railway via Flex Query
+	// but we trigger it alongside the B3 push so both sources sync in one hit.
 	mux.Handle("POST /portfolio/import-push", server.withPushToken(http.HandlerFunc(server.handleImportPush)))
+	mux.Handle("POST /portfolio/import-ibkr-trigger", server.withPushToken(http.HandlerFunc(server.handleImportIBKR)))
 
 	// Authenticated routes
 	authed := http.NewServeMux()
