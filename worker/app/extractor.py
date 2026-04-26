@@ -36,9 +36,11 @@ class B3PortfolioExtractor:
     def _new_context(self, playwright, *, headless: bool, accept_downloads: bool = False):
         """Launch browser and create a context with stealth settings."""
         browser = playwright.chromium.launch(headless=headless, args=_STEALTH_ARGS)
-        storage = str(self.session_file) if self.session_file.exists() else None
+        # Always start fresh — saved sessions get rotated by B3 and cause
+        # mid-run "session expired" failures. Auto-login from .env runs every
+        # time, which is reliable.
         context = browser.new_context(
-            storage_state=storage,
+            storage_state=None,
             user_agent=_STEALTH_UA,
             viewport={"width": 1920, "height": 1080},
             accept_downloads=accept_downloads,
@@ -128,7 +130,10 @@ class B3PortfolioExtractor:
             if suffix in {".xlsx", ".xlsm"}:
                 return parse_b3_xlsx(file_path)
             return parse_csv(file_path)
-        return self._scrape_table(page)
+        holdings = self._scrape_table(page)
+        if not holdings:
+            self._dump_debug_context(page, reason="scrape-empty")
+        return holdings
 
     def _auto_login(self, page: "Page", context: "BrowserContext") -> None:
         """Fill CPF and password on the B3 login page automatically."""
@@ -270,34 +275,67 @@ class B3PortfolioExtractor:
             except TimeoutError as exc:
                 raise RuntimeError("Timed out while loading the B3 custody page.") from exc
 
+    def _dismiss_cookie_banner(self, page: "Page") -> None:
+        """B3 shows a OneTrust cookie banner whose backdrop intercepts clicks
+        on the rest of the page. Click the accept button if it's there."""
+        for selector in (
+            "#onetrust-accept-btn-handler",
+            "button#onetrust-accept-btn-handler",
+            ".onetrust-close-btn-handler",
+        ):
+            try:
+                btn = page.locator(selector)
+                if btn.count() > 0 and btn.first.is_visible():
+                    btn.first.click(timeout=3000)
+                    page.wait_for_timeout(500)
+                    return
+            except Exception:
+                continue
+
     def _download_file_if_available(self, page: "Page") -> Path | None:
         from playwright.sync_api import Error, TimeoutError
 
         try:
-            # Wait for positions page to fully render before looking for BAIXAR
             try:
                 page.wait_for_load_state("networkidle", timeout=15000)
             except Exception:
                 pass
             page.wait_for_timeout(2000)
 
-            # Click the BAIXAR button to open the download drawer
+            self._dismiss_cookie_banner(page)
+
             page.locator("text=BAIXAR").first.wait_for(state="visible", timeout=20000)
             page.locator("text=BAIXAR").first.click()
 
-            # Select "Arquivo em Excel" in the drawer
-            page.locator("text=Arquivo em Excel").first.wait_for(state="visible", timeout=20000)
-            page.locator("text=Arquivo em Excel").first.click()
+            # Select the Excel radio via its <label for="excel"> — clicking the
+            # text node inside doesn't toggle the input, leaving the submit
+            # BAIXAR disabled.
+            excel_label = page.locator("label[for='excel']")
+            excel_label.wait_for(state="visible", timeout=20000)
+            excel_label.click()
 
-            # Trigger the download — the drawer's BAIXAR is the last one
-            page.wait_for_timeout(1000)
-            with page.expect_download(timeout=30000) as download_info:
-                page.locator("text=BAIXAR").last.click(force=True)
+            # The submit BAIXAR has aria-label="Baixar" and lives inside
+            # b3-button.b3i-download-carteira__baixar. Wait for it to become
+            # enabled (the click above dispatches an Angular form event).
+            submit = page.locator(
+                "b3-button.b3i-download-carteira__baixar button[type='submit']"
+            )
+            submit.wait_for(state="visible", timeout=10000)
+            page.wait_for_function(
+                "el => el && !el.disabled && el.getAttribute('aria-disabled') !== 'true'",
+                arg=submit.element_handle(),
+                timeout=10000,
+            )
+
+            with page.expect_download(timeout=60000) as download_info:
+                submit.click()
             download = download_info.value
             path = self.download_dir / ("portfolio" + Path(download.suggested_filename).suffix)
             download.save_as(str(path))
             return path
-        except (TimeoutError, Error):
+        except (TimeoutError, Error) as exc:
+            import sys
+            print(f"[b3-download] failed: {type(exc).__name__}: {exc}", file=sys.stderr)
             return None
 
     def _scrape_table(self, page: "Page") -> list[Holding]:

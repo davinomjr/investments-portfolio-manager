@@ -19,6 +19,14 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WORKER_DIR="${WORKER_DIR:-$REPO_ROOT/worker}"
 WORKER_VENV="${WORKER_VENV:-$WORKER_DIR/.venv}"
 
+ENV_FILE="$REPO_ROOT/scripts/.env"
+if [[ -f "$ENV_FILE" ]]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "$ENV_FILE"
+  set +a
+fi
+
 : "${PUSH_TOKEN:?PUSH_TOKEN must be set}"
 : "${PUSH_URL:?PUSH_URL must be set}"
 

@@ -18,6 +18,7 @@ backend/data-cache/
 backend-python/.env
 backend/.env
 worker/.env
+scripts/.env
 frontend/.env.local
 database/*.db
 database/*.db-wal
