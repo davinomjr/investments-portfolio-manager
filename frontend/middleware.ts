@@ -3,6 +3,25 @@ import type { NextRequest } from "next/server";
 
 const API_TARGET = process.env.INTERNAL_API_BASE_URL ?? "http://127.0.0.1:8000";
 
+// Treat the token as expired this many milliseconds before its real expiry to
+// absorb modest clock skew between the browser and the backend that signed it.
+const EXPIRY_SKEW_MS = 30_000;
+
+function isAuthTokenUsable(token: string | undefined): boolean {
+  if (!token) return false;
+  const parts = token.split(".");
+  if (parts.length !== 3) return false;
+  try {
+    const payload = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const padded = payload + "=".repeat((4 - (payload.length % 4)) % 4);
+    const claims = JSON.parse(atob(padded)) as { exp?: number };
+    if (typeof claims.exp !== "number") return false;
+    return Date.now() + EXPIRY_SKEW_MS < claims.exp * 1000;
+  } catch {
+    return false;
+  }
+}
+
 export async function middleware(request: NextRequest) {
   // Proxy /api/* requests to the backend
   if (request.nextUrl.pathname.startsWith("/api/")) {
@@ -29,10 +48,14 @@ export async function middleware(request: NextRequest) {
     });
   }
 
-  // Auth gate — redirect unauthenticated users to /login
-  const token = request.cookies.get("auth_token");
-  if (!token) {
-    return NextResponse.redirect(new URL("/login", request.url));
+  // Auth gate — redirect to /login if the cookie is missing or its JWT is expired.
+  const tokenCookie = request.cookies.get("auth_token");
+  if (!isAuthTokenUsable(tokenCookie?.value)) {
+    const response = NextResponse.redirect(new URL("/login", request.url));
+    if (tokenCookie) {
+      response.cookies.delete("auth_token");
+    }
+    return response;
   }
   return NextResponse.next();
 }
