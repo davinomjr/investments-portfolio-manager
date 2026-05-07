@@ -22,6 +22,7 @@ export default function LoginPage() {
         credentials: "include",
       });
       if (res.ok) {
+        localStorage.removeItem("portfolio-values-visible");
         // Keep loading=true — page navigates away, no need to reset
         window.location.replace(`${base}/`);
         return;

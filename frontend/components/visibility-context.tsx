@@ -9,14 +9,14 @@ type VisibilityContextType = {
 };
 
 const VisibilityContext = createContext<VisibilityContextType>({
-  visible: true,
+  visible: false,
   toggle: () => {},
 });
 
 const STORAGE_KEY = "portfolio-values-visible";
 
 export function VisibilityProvider({ children }: { children: ReactNode }) {
-  const [visible, setVisible] = useState(true);
+  const [visible, setVisible] = useState(false);
 
   useEffect(() => {
     const stored = localStorage.getItem(STORAGE_KEY);
