@@ -140,15 +140,28 @@ class B3PortfolioExtractor:
         from playwright.sync_api import TimeoutError
 
         try:
-            # Step 1: fill CPF
-            page.wait_for_selector("input:visible", timeout=10000)
-            cpf_input = page.locator("input:visible").first
+            # Step 1: fill the CPF input. Page renders both a desktop hero
+            # input and a mobile-responsive duplicate; pick whichever is
+            # actually visible in the current viewport.
+            cpf_input = page.locator(
+                "input#input-hero-login:visible, "
+                "input#documento-mobile:visible, "
+                "input[placeholder*='CPF']:visible"
+            ).first
+            cpf_input.wait_for(state="visible", timeout=10000)
             cpf_input.click()
             cpf_input.press_sequentially(config.b3_cpf, delay=60)
 
-            # Step 2: submit via Enter (focus is on the CPF input)
-            page.wait_for_timeout(1000)
-            page.keyboard.press("Enter")
+            # Step 2: click the "Entrar" button. Pressing Enter doesn't work
+            # because the button is type="button" (not submit) — the form has
+            # no native submit handler, only an Angular click handler.
+            page.wait_for_timeout(500)
+            entrar_btn = page.locator(
+                "button[aria-label='Entrar']:visible, "
+                "button:has-text('Entrar'):visible"
+            ).first
+            entrar_btn.wait_for(state="visible", timeout=5000)
+            entrar_btn.click()
         except TimeoutError as exc:
             self._dump_debug_context(page, reason="auto-login-no-cpf-field")
             raise SessionExpiredError("Auto-login failed — CPF field not found.") from exc
