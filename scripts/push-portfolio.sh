@@ -45,27 +45,48 @@ source "$WORKER_VENV/bin/activate"
 TMP_PAYLOAD="$(mktemp -t push-portfolio.XXXXXX.json)"
 trap 'rm -f "$TMP_PAYLOAD"' EXIT
 
-echo "[push] running worker (this opens a browser; B3 portal scrape)…" >&2
-python -m app.main import --json > "$TMP_PAYLOAD"
+# B3 occasionally fails on the modal/download step — a transient timeout
+# leaves the worker producing no holdings, which the backend rejects with
+# 400. Retry once before giving up so a single bad morning doesn't lose
+# the day's sync.
+HTTP_STATUS=""
+for attempt in 1 2; do
+  if [[ "$attempt" -gt 1 ]]; then
+    echo "[push] retrying worker (attempt $attempt) after 15s…" >&2
+    sleep 15
+  fi
 
-if [[ ! -s "$TMP_PAYLOAD" ]]; then
-  echo "[push] worker produced empty output — aborting" >&2
-  exit 1
-fi
+  echo "[push] running worker (this opens a browser; B3 portal scrape)…" >&2
+  : > "$TMP_PAYLOAD"
+  if ! python -m app.main import --json > "$TMP_PAYLOAD"; then
+    echo "[push] worker exited non-zero on attempt $attempt" >&2
+    continue
+  fi
 
-echo "[push] uploading to $PUSH_URL …" >&2
-HTTP_STATUS="$(curl --silent --show-error --output /tmp/push-portfolio-response.json \
-  --write-out '%{http_code}' \
-  -X POST "$PUSH_URL" \
-  -H "Authorization: Bearer $PUSH_TOKEN" \
-  -H "Content-Type: application/json" \
-  --data-binary @"$TMP_PAYLOAD")"
+  if [[ ! -s "$TMP_PAYLOAD" ]]; then
+    echo "[push] worker produced empty output on attempt $attempt" >&2
+    continue
+  fi
 
-echo "[push] HTTP $HTTP_STATUS" >&2
-cat /tmp/push-portfolio-response.json
-echo
+  echo "[push] uploading to $PUSH_URL …" >&2
+  HTTP_STATUS="$(curl --silent --show-error --output /tmp/push-portfolio-response.json \
+    --write-out '%{http_code}' \
+    -X POST "$PUSH_URL" \
+    -H "Authorization: Bearer $PUSH_TOKEN" \
+    -H "Content-Type: application/json" \
+    --data-binary @"$TMP_PAYLOAD")"
+
+  echo "[push] HTTP $HTTP_STATUS (attempt $attempt)" >&2
+  cat /tmp/push-portfolio-response.json
+  echo
+
+  if [[ "$HTTP_STATUS" == "200" ]]; then
+    break
+  fi
+done
 
 if [[ "$HTTP_STATUS" != "200" ]]; then
+  echo "[push] B3 push failed after retries — skipping IBKR" >&2
   exit 1
 fi
 

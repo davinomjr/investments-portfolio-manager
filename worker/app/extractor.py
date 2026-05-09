@@ -349,6 +349,10 @@ class B3PortfolioExtractor:
         except (TimeoutError, Error) as exc:
             import sys
             print(f"[b3-download] failed: {type(exc).__name__}: {exc}", file=sys.stderr)
+            # Capture modal state at the moment of failure. The later
+            # scrape-empty dump overwrites the same filenames, so use a
+            # download-specific suffix to preserve evidence.
+            self._dump_debug_context(page, reason="download-failed", suffix="download")
             return None
 
     def _scrape_table(self, page: "Page") -> list[Holding]:
@@ -391,12 +395,16 @@ class B3PortfolioExtractor:
             )
         return holdings
 
-    def _dump_debug_context(self, page: "Page", *, reason: str) -> None:
+    def _dump_debug_context(self, page: "Page", *, reason: str, suffix: str = "") -> None:
         """Print diagnostic info to stderr so it surfaces in Railway logs.
 
         Also writes a screenshot + HTML dump into the download dir for local
         runs, but the stderr output is what matters on Railway where the
         container filesystem isn't easily accessible.
+
+        ``suffix`` distinguishes dumps from different failure points in the
+        same run (e.g. "download" vs the default scrape-empty dump), so they
+        don't clobber each other on disk.
         """
         import sys
 
@@ -437,8 +445,9 @@ class B3PortfolioExtractor:
             log(f"html=<error: {exc}>")
 
         try:
-            shot = self.download_dir / "b3_debug_screenshot.png"
-            dump = self.download_dir / "b3_debug_page.html"
+            tag = f"_{suffix}" if suffix else ""
+            shot = self.download_dir / f"b3_debug_screenshot{tag}.png"
+            dump = self.download_dir / f"b3_debug_page{tag}.html"
             page.screenshot(path=str(shot), full_page=True)
             dump.write_text(page.content(), encoding="utf-8")
             log(f"screenshot={shot} html_dump={dump}")
