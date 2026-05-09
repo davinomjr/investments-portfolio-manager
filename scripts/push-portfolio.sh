@@ -47,10 +47,10 @@ trap 'rm -f "$TMP_PAYLOAD"' EXIT
 
 # B3 occasionally fails on the modal/download step — a transient timeout
 # leaves the worker producing no holdings, which the backend rejects with
-# 400. Retry once before giving up so a single bad morning doesn't lose
-# the day's sync.
+# 400. Retry up to 2 more times before giving up so a single bad morning
+# doesn't lose the day's sync.
 HTTP_STATUS=""
-for attempt in 1 2; do
+for attempt in 1 2 3; do
   if [[ "$attempt" -gt 1 ]]; then
     echo "[push] retrying worker (attempt $attempt) after 15s…" >&2
     sleep 15
