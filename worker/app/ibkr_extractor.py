@@ -9,13 +9,17 @@ import xml.etree.ElementTree as ET
 
 from app.models import Holding, ImportResult
 
+# Use the canonical v3 endpoints. The legacy /Universal/servlet/ paths still
+# exist but are degraded — they intermittently return 1001 even when the
+# query is healthy, and rate-limit aggressively. The /AccountManagement/
+# FlexWebService/ paths are the v3-documented endpoints and behave correctly.
 INITIATE_URL = (
-    "https://ndcdyn.interactivebrokers.com/Universal/servlet/FlexStatementService.SendRequest"
-    "?v=3&t={token}&q={query_id}"
+    "https://ndcdyn.interactivebrokers.com/AccountManagement/FlexWebService/SendRequest"
+    "?t={token}&q={query_id}&v=3"
 )
 FETCH_URL = (
-    "https://gdcdyn.interactivebrokers.com/Universal/servlet/FlexStatementService.GetStatement"
-    "?v=3&t={token}&q={ref_code}"
+    "https://gdcdyn.interactivebrokers.com/AccountManagement/FlexWebService/GetStatement"
+    "?t={token}&q={ref_code}&v=3"
 )
 
 ASSET_CLASS_MAP = {
