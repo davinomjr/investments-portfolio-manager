@@ -46,16 +46,30 @@ class IbkrExtractor:
             raise RuntimeError("IBKR_FLEX_TOKEN and IBKR_FLEX_QUERY_ID must be set")
 
     def _initiate(self) -> tuple[str, str]:
+        # IBKR sometimes returns "Statement could not be generated at this
+        # time. Please try again shortly." — retry a few times before failing
+        # the whole sync.
         url = INITIATE_URL.format(token=self.token, query_id=self.query_id)
-        raw = _fetch(url)
-        root = ET.fromstring(raw)
-        status = root.findtext("Status")
-        if status != "Success":
-            error = root.findtext("ErrorMessage") or raw
-            raise RuntimeError(f"IBKR Flex initiate failed: {error}")
-        ref_code = root.findtext("ReferenceCode") or ""
-        base_url = root.findtext("Url") or ""
-        return ref_code, base_url
+        last_error = ""
+        for attempt in range(1, MAX_RETRIES + 1):
+            try:
+                raw = _fetch(url)
+            except (urllib.error.URLError, OSError) as exc:
+                last_error = str(exc)
+                if attempt == MAX_RETRIES:
+                    raise RuntimeError(f"IBKR Flex initiate failed after {MAX_RETRIES} attempts: {exc}") from exc
+                time.sleep(POLL_INTERVAL)
+                continue
+            root = ET.fromstring(raw)
+            status = root.findtext("Status")
+            if status == "Success":
+                ref_code = root.findtext("ReferenceCode") or ""
+                base_url = root.findtext("Url") or ""
+                return ref_code, base_url
+            last_error = root.findtext("ErrorMessage") or raw
+            if attempt < MAX_RETRIES:
+                time.sleep(POLL_INTERVAL)
+        raise RuntimeError(f"IBKR Flex initiate failed after {MAX_RETRIES} attempts: {last_error}")
 
     def _fetch_report(self, ref_code: str) -> str:
         url = FETCH_URL.format(token=self.token, ref_code=ref_code)
