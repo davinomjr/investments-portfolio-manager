@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  LaunchAgent that runs scripts/push-portfolio.sh daily at 09:00.
+  LaunchAgent that runs scripts/push-portfolio.sh daily at 07:00.
 
   Install on a new machine:
     1. Edit the absolute path inside <ProgramArguments> below to match the
@@ -9,8 +9,8 @@
          ~/Library/LaunchAgents/com.davinomjr.investments-sync.plist
     3. launchctl bootstrap gui/$(id -u) \
          ~/Library/LaunchAgents/com.davinomjr.investments-sync.plist
-    4. (optional, needs sudo) wake the Mac shortly before 09:00:
-         sudo pmset repeat wakeorpoweron MTWRFSU 08:55:00
+    4. (optional, needs sudo) wake the Mac shortly before 07:00:
+         sudo pmset repeat wakeorpoweron MTWRFSU 06:55:00
 
   Run on demand (for testing):
     launchctl kickstart -k gui/$(id -u)/com.davinomjr.investments-sync
@@ -35,7 +35,7 @@
     <key>StartCalendarInterval</key>
     <dict>
         <key>Hour</key>
-        <integer>9</integer>
+        <integer>7</integer>
         <key>Minute</key>
         <integer>0</integer>
     </dict>
