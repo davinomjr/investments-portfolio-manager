@@ -2,9 +2,17 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useVisibility } from "@/components/visibility-context";
 import { Home, ChartNoAxesCombined, Building2, ChartCandlestick } from "lucide-react";
+
+function RefreshIcon({ className = "" }: { className?: string }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className={`h-4 w-4 shrink-0 ${className}`}>
+      <path fillRule="evenodd" d="M15.312 11.424a5.5 5.5 0 0 1-9.201 2.466l-.312-.311h2.433a.75.75 0 0 0 0-1.5H3.989a.75.75 0 0 0-.75.75v4.242a.75.75 0 0 0 1.5 0v-2.43l.31.31a7 7 0 0 0 11.712-3.138.75.75 0 0 0-1.449-.39Zm1.23-3.723a.75.75 0 0 0 .219-.53V2.929a.75.75 0 0 0-1.5 0v2.43l-.31-.31A7 7 0 0 0 3.239 8.188a.75.75 0 1 0 1.448.389A5.5 5.5 0 0 1 13.89 6.11l.311.31h-2.432a.75.75 0 0 0 0 1.5h4.243a.75.75 0 0 0 .53-.219Z" clipRule="evenodd" />
+    </svg>
+  );
+}
 
 const ITEMS = [
   { href: "/", label: "Portfolio", Icon: Home },
@@ -19,11 +27,19 @@ export function TopNav() {
   const { visible, toggle } = useVisibility();
   const [pendingHref, setPendingHref] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [isRefreshing, startRefresh] = useTransition();
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setPendingHref(null);
   }, [pathname]);
+
+  function handleRefresh() {
+    setMenuOpen(false);
+    startRefresh(() => {
+      router.refresh();
+    });
+  }
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -93,19 +109,22 @@ export function TopNav() {
               aria-label="More options"
               className="flex items-center justify-center rounded-full border border-white/15 px-3 py-1.5 text-white/50 transition hover:border-white/30 hover:text-white/80 md:px-4 md:py-2"
             >
-              <span className="text-sm font-bold leading-none tracking-widest">···</span>
+              {isRefreshing ? (
+                <RefreshIcon className="animate-spin" />
+              ) : (
+                <span className="text-sm font-bold leading-none tracking-widest">···</span>
+              )}
             </button>
 
             {menuOpen && (
               <div className="absolute right-0 top-full mt-2 min-w-[140px] rounded-2xl border border-white/15 bg-[#1a1d25] py-1 shadow-xl">
                 <button
-                  onClick={() => { router.refresh(); setMenuOpen(false); }}
-                  className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-white/60 transition hover:bg-white/5 hover:text-white"
+                  onClick={handleRefresh}
+                  disabled={isRefreshing}
+                  className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-white/60 transition hover:bg-white/5 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4 shrink-0">
-                    <path fillRule="evenodd" d="M15.312 11.424a5.5 5.5 0 0 1-9.201 2.466l-.312-.311h2.433a.75.75 0 0 0 0-1.5H3.989a.75.75 0 0 0-.75.75v4.242a.75.75 0 0 0 1.5 0v-2.43l.31.31a7 7 0 0 0 11.712-3.138.75.75 0 0 0-1.449-.39Zm1.23-3.723a.75.75 0 0 0 .219-.53V2.929a.75.75 0 0 0-1.5 0v2.43l-.31-.31A7 7 0 0 0 3.239 8.188a.75.75 0 1 0 1.448.389A5.5 5.5 0 0 1 13.89 6.11l.311.31h-2.432a.75.75 0 0 0 0 1.5h4.243a.75.75 0 0 0 .53-.219Z" clipRule="evenodd" />
-                  </svg>
-                  Refresh
+                  <RefreshIcon className={isRefreshing ? "animate-spin" : ""} />
+                  {isRefreshing ? "Refreshing..." : "Refresh"}
                 </button>
                 <div className="mx-3 my-1 h-px bg-white/10" />
                 <button
