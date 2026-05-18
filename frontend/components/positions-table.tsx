@@ -15,10 +15,19 @@ function formatCurrency(value: number, currency = "BRL") {
   }).format(value);
 }
 
-type SortKey = "ticker" | "type" | "qty" | "price" | "value";
+function formatPct(value: number) {
+  const sign = value >= 0 ? "+" : "−";
+  return `${sign}${Math.abs(value).toFixed(2)}%`;
+}
+
+type SortKey = "ticker" | "type" | "qty" | "price" | "value" | "pnl";
 type SortDir = "asc" | "desc";
 
-const NUMERIC_KEYS: ReadonlySet<SortKey> = new Set(["qty", "price", "value"]);
+const NUMERIC_KEYS: ReadonlySet<SortKey> = new Set(["qty", "price", "value", "pnl"]);
+
+function positionPrice(position: Position): number {
+  return position.last_price ?? position.avg_price;
+}
 
 function positionSortValue(position: Position, key: SortKey): number | string {
   switch (key) {
@@ -29,9 +38,11 @@ function positionSortValue(position: Position, key: SortKey): number | string {
     case "qty":
       return position.quantity;
     case "price":
-      return position.avg_price;
+      return positionPrice(position);
     case "value":
       return position.market_value_brl;
+    case "pnl":
+      return position.pnl_pct ?? 0;
   }
 }
 
@@ -105,38 +116,81 @@ export function PositionsTable({ positions }: { positions: Position[] }) {
                 <SortHeader label="Ticker" sortKey="ticker" activeKey={sortKey} activeDir={sortDir} onSort={handleSort} className="pb-2 pr-4" />
                 <SortHeader label="Type" sortKey="type" activeKey={sortKey} activeDir={sortDir} onSort={handleSort} className="hidden pb-2 pr-4 sm:table-cell" />
                 <SortHeader label="Qty" sortKey="qty" activeKey={sortKey} activeDir={sortDir} onSort={handleSort} className="pb-2 pr-4" />
-                <SortHeader label="Avg/Close" sortKey="price" activeKey={sortKey} activeDir={sortDir} onSort={handleSort} className="hidden pb-2 pr-4 sm:table-cell" />
+                <SortHeader label="Last / Avg" sortKey="price" activeKey={sortKey} activeDir={sortDir} onSort={handleSort} className="hidden pb-2 pr-4 sm:table-cell" />
                 <SortHeader label="Value" sortKey="value" activeKey={sortKey} activeDir={sortDir} onSort={handleSort} className="pb-2 pr-4" />
+                <SortHeader label="P&L" sortKey="pnl" activeKey={sortKey} activeDir={sortDir} onSort={handleSort} className="hidden pb-2 pr-4 md:table-cell" />
               </tr>
             </thead>
             <tbody>
-              {sortedPositions.map((position) => (
-                <tr key={position.ticker} className="rounded-2xl border border-white/10 bg-[#272a36]">
-                  <td className="rounded-l-2xl px-3 py-2.5 font-semibold md:px-4 md:py-3">
-                    <Link
-                      href={`/results#${position.ticker}`}
-                      className="transition-colors hover:text-white/80 hover:underline"
-                    >
-                      {formatHoldingLabel(position.ticker, position.company_name, position.asset_type)}
-                    </Link>
-                  </td>
-                  <td className="hidden px-3 py-2.5 sm:table-cell md:px-4 md:py-3">
-                    <span
-                      className="inline-flex rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em]"
-                      style={{
-                        backgroundColor: getAssetStyle(position.asset_type).soft,
-                        borderColor: getAssetStyle(position.asset_type).border,
-                        color: getAssetStyle(position.asset_type).text,
-                      }}
-                    >
-                      {getAssetStyle(position.asset_type).label}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2.5 md:px-4 md:py-3">{visible ? position.quantity : "**"}</td>
-                  <td className="hidden px-3 py-2.5 sm:table-cell md:px-4 md:py-3">{visible ? formatCurrency(position.avg_price, position.currency) : "**"}</td>
-                  <td className="rounded-r-2xl px-3 py-2.5 md:px-4 md:py-3">{visible ? formatCurrency(position.market_value_brl, "BRL") : "**"}</td>
-                </tr>
-              ))}
+              {sortedPositions.map((position) => {
+                const style = getAssetStyle(position.asset_type);
+                const hasLast = position.last_price !== null;
+                const dayPositive = (position.day_change_pct ?? 0) >= 0;
+                const pnlPositive = position.pnl_brl >= 0;
+                const pnlColor = pnlPositive ? "text-emerald-300" : "text-rose-300";
+                const dayColor = dayPositive ? "text-emerald-300" : "text-rose-300";
+                return (
+                  <tr key={position.ticker} className="rounded-2xl border border-white/10 bg-[#272a36]">
+                    <td className="rounded-l-2xl px-3 py-2.5 font-semibold md:px-4 md:py-3">
+                      <Link
+                        href={`/results#${position.ticker}`}
+                        className="transition-colors hover:text-white/80 hover:underline"
+                      >
+                        {formatHoldingLabel(position.ticker, position.company_name, position.asset_type)}
+                      </Link>
+                      {position.quote_status === "stale" ? (
+                        <span className="ml-2 text-[10px] uppercase tracking-[0.2em] text-amber-300/80">stale</span>
+                      ) : null}
+                    </td>
+                    <td className="hidden px-3 py-2.5 sm:table-cell md:px-4 md:py-3">
+                      <span
+                        className="inline-flex rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em]"
+                        style={{
+                          backgroundColor: style.soft,
+                          borderColor: style.border,
+                          color: style.text,
+                        }}
+                      >
+                        {style.label}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2.5 md:px-4 md:py-3">{visible ? position.quantity : "**"}</td>
+                    <td className="hidden px-3 py-2.5 sm:table-cell md:px-4 md:py-3">
+                      {visible ? (
+                        <div className="flex flex-col leading-tight">
+                          <span>{hasLast ? formatCurrency(position.last_price as number, position.currency) : "—"}</span>
+                          <span className="text-xs text-white/45">
+                            {formatCurrency(position.avg_price, position.currency)}
+                            {position.day_change_pct !== null ? (
+                              <span className={`ml-2 ${dayColor}`}>{formatPct(position.day_change_pct)}</span>
+                            ) : null}
+                          </span>
+                        </div>
+                      ) : (
+                        "**"
+                      )}
+                    </td>
+                    <td className="rounded-r-2xl px-3 py-2.5 md:rounded-none md:px-4 md:py-3">{visible ? formatCurrency(position.market_value_brl, "BRL") : "**"}</td>
+                    <td className="hidden rounded-r-2xl px-3 py-2.5 md:table-cell md:px-4 md:py-3">
+                      {visible ? (
+                        position.pnl_pct !== null ? (
+                          <div className={`flex flex-col leading-tight font-semibold ${pnlColor}`}>
+                            <span>{formatPct(position.pnl_pct)}</span>
+                            <span className="text-xs font-normal">
+                              {pnlPositive ? "+" : "−"}
+                              {formatCurrency(Math.abs(position.pnl_brl), "BRL")}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-white/40">—</span>
+                        )
+                      ) : (
+                        "**"
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

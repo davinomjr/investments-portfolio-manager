@@ -16,6 +16,10 @@ import {
 const EMPTY_PORTFOLIO: Portfolio = {
   total_positions: 0,
   estimated_cost_basis: 0,
+  market_value_brl: 0,
+  pnl_brl: 0,
+  pnl_pct: null,
+  quotes_status: "unavailable",
   allocations: [],
 };
 

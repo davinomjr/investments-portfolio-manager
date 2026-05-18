@@ -39,13 +39,21 @@ type Service struct {
 	fxMu        sync.Mutex
 	fxRate      float64
 	fxFetchedAt time.Time
+
+	quotesMu    sync.RWMutex
+	quotesCache map[string]quoteCacheEntry
+
+	tdMu         sync.Mutex
+	tdSnapshot   map[string]tdProduct
+	tdSnapshotAt time.Time
 }
 
 func New(db *sql.DB, cfg config.Config) *Service {
 	return &Service{
-		DB:     db,
-		Config: cfg,
-		Client: &http.Client{Timeout: 60 * time.Second},
+		DB:          db,
+		Config:      cfg,
+		Client:      &http.Client{Timeout: 60 * time.Second},
+		quotesCache: map[string]quoteCacheEntry{},
 	}
 }
 
@@ -172,8 +180,15 @@ func (s *Service) ImportPush(ctx context.Context, holdings []models.HoldingPaylo
 }
 
 func (s *Service) GetPositions(ctx context.Context) ([]models.PositionResponse, error) {
+	return s.loadEnrichedPositions(ctx)
+}
+
+// loadEnrichedPositions returns every stored position with cost basis, market
+// value (using real-time quotes when available), and P&L fields populated.
+// Returns positions ordered by most-recently-updated first.
+func (s *Service) loadEnrichedPositions(ctx context.Context) ([]models.PositionResponse, error) {
 	rows, err := s.DB.QueryContext(ctx, `
-		SELECT a.ticker, COALESCE(am.company_name,''), a.asset_type, p.quantity, p.avg_price, a.currency, COALESCE(p.broker,''), p.source, p.last_updated, p.hidden
+		SELECT a.id, a.ticker, COALESCE(am.company_name,''), a.asset_type, p.quantity, p.avg_price, a.currency, COALESCE(p.broker,''), p.source, p.last_updated, p.hidden
 		FROM positions p
 		JOIN assets a ON a.id = p.asset_id
 		LEFT JOIN asset_metadata am ON am.asset_id = a.id
@@ -182,21 +197,66 @@ func (s *Service) GetPositions(ctx context.Context) ([]models.PositionResponse, 
 		return nil, err
 	}
 	defer rows.Close()
-	usdToBRL := s.getUSDToBRL(ctx)
-	out := make([]models.PositionResponse, 0)
+
+	type rowData struct {
+		assetID int64
+		pos     models.PositionResponse
+	}
+	rowsData := make([]rowData, 0)
+	requests := make([]quoteRequest, 0)
 	for rows.Next() {
-		var item models.PositionResponse
-		if err := rows.Scan(&item.Ticker, &item.CompanyName, &item.AssetType, &item.Quantity, &item.AvgPrice, &item.Currency, &item.Broker, &item.Source, &item.LastUpdated, &item.Hidden); err != nil {
+		var rd rowData
+		if err := rows.Scan(&rd.assetID, &rd.pos.Ticker, &rd.pos.CompanyName, &rd.pos.AssetType, &rd.pos.Quantity, &rd.pos.AvgPrice, &rd.pos.Currency, &rd.pos.Broker, &rd.pos.Source, &rd.pos.LastUpdated, &rd.pos.Hidden); err != nil {
 			return nil, err
 		}
-		value := item.Quantity * item.AvgPrice
-		if item.Currency == "USD" {
-			value *= usdToBRL
+		rowsData = append(rowsData, rd)
+		if isQuotableAssetType(rd.pos.AssetType) {
+			requests = append(requests, quoteRequest{AssetID: rd.assetID, Ticker: rd.pos.Ticker, Currency: rd.pos.Currency, AssetType: rd.pos.AssetType})
 		}
-		item.MarketValueBRL = value
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	usdToBRL := s.getUSDToBRL(ctx)
+	quotes := s.FetchQuotes(ctx, requests)
+
+	out := make([]models.PositionResponse, 0, len(rowsData))
+	for _, rd := range rowsData {
+		item := rd.pos
+		fx := 1.0
+		if item.Currency == "USD" {
+			fx = usdToBRL
+		}
+		item.CostBasisBRL = item.Quantity * item.AvgPrice * fx
+		if q, ok := quotes[item.Ticker]; ok && q.LastPrice > 0 {
+			last := q.LastPrice
+			item.LastPrice = &last
+			item.MarketValueBRL = item.Quantity * last * fx
+			if q.PreviousClose > 0 {
+				change := (last - q.PreviousClose) / q.PreviousClose * 100
+				item.DayChangePct = &change
+			}
+			if q.Stale {
+				item.QuoteStatus = "stale"
+			} else {
+				item.QuoteStatus = "live"
+			}
+			if !q.FetchedAt.IsZero() {
+				item.QuoteFetchedAt = q.FetchedAt.UTC().Format(time.RFC3339)
+			}
+		} else {
+			item.MarketValueBRL = item.CostBasisBRL
+			item.QuoteStatus = "missing"
+		}
+		item.PnLBRL = item.MarketValueBRL - item.CostBasisBRL
+		if item.CostBasisBRL > 0 {
+			pct := item.PnLBRL / item.CostBasisBRL * 100
+			item.PnLPct = &pct
+		}
 		out = append(out, item)
 	}
-	return out, rows.Err()
+	return out, nil
 }
 
 func (s *Service) SetPositionsVisibility(ctx context.Context, visible bool) error {
@@ -315,53 +375,65 @@ func (s *Service) fetchUSDToBRLFrankfurter(ctx context.Context) (float64, error)
 }
 
 func (s *Service) GetPortfolio(ctx context.Context) (models.PortfolioResponse, error) {
-	rows, err := s.DB.QueryContext(ctx, `
-		SELECT a.ticker, COALESCE(am.company_name,''), a.asset_type, p.quantity, p.avg_price, a.currency
-		FROM positions p
-		JOIN assets a ON a.id = p.asset_id
-		LEFT JOIN asset_metadata am ON am.asset_id = a.id`)
+	positions, err := s.loadEnrichedPositions(ctx)
 	if err != nil {
 		return models.PortfolioResponse{}, err
 	}
-	defer rows.Close()
 
-	usdToBRL := s.getUSDToBRL(ctx)
-
-	type alloc struct {
-		companyName string
-		assetType   string
-		value       float64
-	}
-	allocByTicker := map[string]alloc{}
-	total := 0.0
-	count := 0
-	for rows.Next() {
-		count++
-		var ticker, companyName, assetType, currency string
-		var qty, price float64
-		if err := rows.Scan(&ticker, &companyName, &assetType, &qty, &price, &currency); err != nil {
-			return models.PortfolioResponse{}, err
-		}
-		value := qty * price
-		if currency == "USD" {
-			value *= usdToBRL
-		}
-		total += value
-		allocByTicker[ticker] = alloc{companyName: companyName, assetType: assetType, value: value}
-	}
-	allocations := make([]models.AllocationItem, 0, len(allocByTicker))
-	for ticker, item := range allocByTicker {
-		weight := 0.0
-		if total > 0 {
-			weight = item.value / total
+	costBasis := 0.0
+	marketValue := 0.0
+	liveCount := 0
+	missingCount := 0
+	staleCount := 0
+	allocations := make([]models.AllocationItem, 0, len(positions))
+	for _, p := range positions {
+		costBasis += p.CostBasisBRL
+		marketValue += p.MarketValueBRL
+		switch p.QuoteStatus {
+		case "live":
+			liveCount++
+		case "stale":
+			staleCount++
+		case "missing":
+			missingCount++
 		}
 		allocations = append(allocations, models.AllocationItem{
-			Ticker: ticker, CompanyName: item.companyName, AssetType: item.assetType, MarketValue: item.value, Weight: weight,
+			Ticker:      p.Ticker,
+			CompanyName: p.CompanyName,
+			AssetType:   p.AssetType,
+			MarketValue: p.MarketValueBRL,
 		})
 	}
+	for i := range allocations {
+		if marketValue > 0 {
+			allocations[i].Weight = allocations[i].MarketValue / marketValue
+		}
+	}
 	sort.Slice(allocations, func(i, j int) bool { return allocations[i].MarketValue > allocations[j].MarketValue })
+
+	pnl := marketValue - costBasis
+	var pnlPct *float64
+	if costBasis > 0 {
+		pct := pnl / costBasis * 100
+		pnlPct = &pct
+	}
+
+	status := "live"
+	switch {
+	case liveCount == 0 && staleCount == 0:
+		status = "unavailable"
+	case missingCount > 0 || staleCount > 0:
+		status = "partial"
+	}
+
 	return models.PortfolioResponse{
-		TotalPositions: count, EstimatedCostBasis: total, Allocations: allocations,
+		TotalPositions:     len(positions),
+		EstimatedCostBasis: costBasis,
+		MarketValueBRL:     marketValue,
+		PnLBRL:             pnl,
+		PnLPct:             pnlPct,
+		QuotesStatus:       status,
+		Allocations:        allocations,
 	}, nil
 }
 
