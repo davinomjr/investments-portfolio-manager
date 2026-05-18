@@ -46,6 +46,7 @@ type Service struct {
 	tdMu         sync.Mutex
 	tdSnapshot   map[string]tdProduct
 	tdSnapshotAt time.Time
+	tdRefreshing bool
 }
 
 func New(db *sql.DB, cfg config.Config) *Service {
@@ -219,7 +220,11 @@ func (s *Service) loadEnrichedPositions(ctx context.Context) ([]models.PositionR
 	}
 
 	usdToBRL := s.getUSDToBRL(ctx)
+	fetchStart := time.Now()
 	quotes := s.FetchQuotes(ctx, requests)
+	if d := time.Since(fetchStart); d > 200*time.Millisecond {
+		log.Printf("quote fan-out: %d requests, %d resolved, %v", len(requests), len(quotes), d.Round(time.Millisecond))
+	}
 
 	out := make([]models.PositionResponse, 0, len(rowsData))
 	for _, rd := range rowsData {

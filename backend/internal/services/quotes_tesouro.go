@@ -3,9 +3,13 @@ package services
 import (
 	"context"
 	"encoding/csv"
+	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -79,25 +83,102 @@ func (s *Service) fetchTesouroDiretoQuote(ctx context.Context, ticker string) (Q
 	}, nil
 }
 
-// tesouroDiretoSnapshot returns the latest TD product index, fetching it from
-// the Treasury's open-data portal when the cached copy is older than
-// TesouroDiretoTTL. The snapshot is shared across all government_bond lookups.
-func (s *Service) tesouroDiretoSnapshot(ctx context.Context) (map[string]tdProduct, error) {
+// tesouroDiretoSnapshot returns the cached TD product index without blocking
+// on a network fetch. If the snapshot is missing or older than
+// TesouroDiretoTTL, a background refresh is triggered and the current (or
+// nil) snapshot is returned immediately. Callers must treat a nil snapshot
+// as "bond prices not yet available; fall back to cost basis".
+func (s *Service) tesouroDiretoSnapshot(_ context.Context) (map[string]tdProduct, error) {
 	s.tdMu.Lock()
-	defer s.tdMu.Unlock()
-	if s.tdSnapshot != nil && time.Since(s.tdSnapshotAt) < s.Config.TesouroDiretoTTL {
-		return s.tdSnapshot, nil
+	snap := s.tdSnapshot
+	stale := snap == nil || time.Since(s.tdSnapshotAt) > s.Config.TesouroDiretoTTL
+	if stale && !s.tdRefreshing {
+		s.tdRefreshing = true
+		go s.refreshTesouroDireto()
 	}
+	s.tdMu.Unlock()
+	if snap == nil {
+		return nil, fmt.Errorf("td: snapshot warming")
+	}
+	return snap, nil
+}
+
+// refreshTesouroDireto fetches the gov.br CSV in the background, updates the
+// in-memory snapshot, and persists it to disk for fast recovery on restart.
+func (s *Service) refreshTesouroDireto() {
+	defer func() {
+		s.tdMu.Lock()
+		s.tdRefreshing = false
+		s.tdMu.Unlock()
+	}()
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+	start := time.Now()
 	snap, err := s.fetchTesouroDiretoIndex(ctx)
 	if err != nil {
-		if s.tdSnapshot != nil {
-			return s.tdSnapshot, nil
-		}
-		return nil, err
+		log.Printf("td refresh failed after %v: %v", time.Since(start), err)
+		return
 	}
+	s.tdMu.Lock()
 	s.tdSnapshot = snap
 	s.tdSnapshotAt = time.Now()
-	return snap, nil
+	s.tdMu.Unlock()
+	s.persistTesouroDiretoSnapshot(snap)
+	log.Printf("td refresh complete in %v (%d products)", time.Since(start), len(snap))
+}
+
+type tdDiskEntry struct {
+	Snapshot   map[string]tdProduct `json:"snapshot"`
+	SnapshotAt time.Time            `json:"snapshot_at"`
+}
+
+func (s *Service) tesouroDiretoCachePath() string {
+	return filepath.Join(s.Config.DataCacheDir, "td-snapshot.json")
+}
+
+func (s *Service) persistTesouroDiretoSnapshot(snap map[string]tdProduct) {
+	path := s.tesouroDiretoCachePath()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		log.Printf("td persist mkdir: %v", err)
+		return
+	}
+	data, err := json.Marshal(tdDiskEntry{Snapshot: snap, SnapshotAt: time.Now()})
+	if err != nil {
+		log.Printf("td persist marshal: %v", err)
+		return
+	}
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+		log.Printf("td persist write: %v", err)
+		return
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		log.Printf("td persist rename: %v", err)
+	}
+}
+
+// WarmTesouroDireto seeds the snapshot from disk if available, then kicks off
+// a background refresh when the disk copy is stale. Safe to call at startup —
+// it never blocks the caller.
+func (s *Service) WarmTesouroDireto() {
+	data, err := os.ReadFile(s.tesouroDiretoCachePath())
+	if err == nil {
+		var entry tdDiskEntry
+		if err := json.Unmarshal(data, &entry); err == nil && len(entry.Snapshot) > 0 {
+			s.tdMu.Lock()
+			s.tdSnapshot = entry.Snapshot
+			s.tdSnapshotAt = entry.SnapshotAt
+			s.tdMu.Unlock()
+			log.Printf("td snapshot loaded from disk (%d products, age %v)", len(entry.Snapshot), time.Since(entry.SnapshotAt).Round(time.Second))
+		}
+	}
+	s.tdMu.Lock()
+	stale := s.tdSnapshot == nil || time.Since(s.tdSnapshotAt) > s.Config.TesouroDiretoTTL
+	if stale && !s.tdRefreshing {
+		s.tdRefreshing = true
+		go s.refreshTesouroDireto()
+	}
+	s.tdMu.Unlock()
 }
 
 // PrecoTaxaTesouroDireto.csv is the official daily-published price + yield

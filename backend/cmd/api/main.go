@@ -27,6 +27,7 @@ func main() {
 	}
 
 	service := services.New(database, cfg)
+	service.WarmTesouroDireto()
 	server := &http.Server{
 		Addr:    cfg.Addr,
 		Handler: httpapi.New(service, cfg),
