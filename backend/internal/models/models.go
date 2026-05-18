@@ -10,17 +10,24 @@ type ImportJobResponse struct {
 }
 
 type PositionResponse struct {
-	Ticker         string  `json:"ticker"`
-	CompanyName    string  `json:"company_name,omitempty"`
-	AssetType      string  `json:"asset_type"`
-	Quantity       float64 `json:"quantity"`
-	AvgPrice       float64 `json:"avg_price"`
-	Currency       string  `json:"currency"`
-	Broker         string  `json:"broker,omitempty"`
-	Source         string  `json:"source"`
-	LastUpdated    string  `json:"last_updated"`
-	Hidden         bool    `json:"hidden"`
-	MarketValueBRL float64 `json:"market_value_brl"`
+	Ticker         string   `json:"ticker"`
+	CompanyName    string   `json:"company_name,omitempty"`
+	AssetType      string   `json:"asset_type"`
+	Quantity       float64  `json:"quantity"`
+	AvgPrice       float64  `json:"avg_price"`
+	Currency       string   `json:"currency"`
+	Broker         string   `json:"broker,omitempty"`
+	Source         string   `json:"source"`
+	LastUpdated    string   `json:"last_updated"`
+	Hidden         bool     `json:"hidden"`
+	MarketValueBRL float64  `json:"market_value_brl"`
+	CostBasisBRL   float64  `json:"cost_basis_brl"`
+	LastPrice      *float64 `json:"last_price"`
+	DayChangePct   *float64 `json:"day_change_pct"`
+	PnLBRL         float64  `json:"pnl_brl"`
+	PnLPct         *float64 `json:"pnl_pct"`
+	QuoteStatus    string   `json:"quote_status"`
+	QuoteFetchedAt string   `json:"quote_fetched_at,omitempty"`
 }
 
 type AllocationItem struct {
@@ -34,6 +41,10 @@ type AllocationItem struct {
 type PortfolioResponse struct {
 	TotalPositions     int              `json:"total_positions"`
 	EstimatedCostBasis float64          `json:"estimated_cost_basis"`
+	MarketValueBRL     float64          `json:"market_value_brl"`
+	PnLBRL             float64          `json:"pnl_brl"`
+	PnLPct             *float64         `json:"pnl_pct"`
+	QuotesStatus       string           `json:"quotes_status"`
 	Allocations        []AllocationItem `json:"allocations"`
 }
 

@@ -10,6 +10,13 @@ export type Position = {
   last_updated: string;
   hidden: boolean;
   market_value_brl: number;
+  cost_basis_brl: number;
+  last_price: number | null;
+  day_change_pct: number | null;
+  pnl_brl: number;
+  pnl_pct: number | null;
+  quote_status: "live" | "stale" | "missing";
+  quote_fetched_at?: string;
 };
 
 export type Allocation = {
@@ -23,6 +30,10 @@ export type Allocation = {
 export type Portfolio = {
   total_positions: number;
   estimated_cost_basis: number;
+  market_value_brl: number;
+  pnl_brl: number;
+  pnl_pct: number | null;
+  quotes_status: "live" | "partial" | "unavailable";
   allocations: Allocation[];
 };
 

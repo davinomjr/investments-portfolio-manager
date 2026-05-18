@@ -117,6 +117,14 @@ func Migrate(database *sql.DB) error {
 			FOREIGN KEY(asset_id) REFERENCES assets(id)
 		);`,
 		`ALTER TABLE positions ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0;`,
+		`CREATE TABLE IF NOT EXISTS asset_quotes (
+			asset_id INTEGER PRIMARY KEY,
+			last_price REAL NOT NULL,
+			previous_close REAL,
+			currency TEXT NOT NULL DEFAULT 'BRL',
+			fetched_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			FOREIGN KEY(asset_id) REFERENCES assets(id) ON DELETE CASCADE
+		);`,
 	}
 	for _, stmt := range stmts {
 		if _, err := database.Exec(stmt); err != nil {

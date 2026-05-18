@@ -33,6 +33,12 @@ type Config struct {
 	IBKRFlexQueryID                 string
 	PushToken                       string
 	CORSOrigins                     []string
+	QuotesEnabled                   bool
+	QuotesProvider                  string
+	QuotesTTL                       time.Duration
+	QuotesHTTPTimeout               time.Duration
+	QuotesConcurrency               int
+	TesouroDiretoTTL                time.Duration
 }
 
 func Load() Config {
@@ -64,6 +70,12 @@ func Load() Config {
 		IBKRFlexQueryID:                 os.Getenv("IBKR_FLEX_QUERY_ID"),
 		PushToken:                       os.Getenv("PUSH_TOKEN"),
 		CORSOrigins:                     parseCORSOrigins(env("CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000")),
+		QuotesEnabled:                   boolEnv("QUOTES_ENABLED", true),
+		QuotesProvider:                  env("QUOTES_PROVIDER", "yahoo"),
+		QuotesTTL:                       durationEnv("QUOTES_TTL", 60*time.Second),
+		QuotesHTTPTimeout:               durationEnv("QUOTES_HTTP_TIMEOUT", 5*time.Second),
+		QuotesConcurrency:               intEnv("QUOTES_CONCURRENCY", 8),
+		TesouroDiretoTTL:                durationEnv("TESOURO_DIRETO_TTL", 6*time.Hour),
 	}
 	return cfg
 }
