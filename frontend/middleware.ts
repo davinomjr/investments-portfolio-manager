@@ -65,6 +65,10 @@ export async function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     "/api/:path*",
+    // Match the basePath root explicitly — the lookahead pattern below
+    // requires at least one segment after "/", so without this entry the
+    // dashboard root falls through unauthenticated.
+    "/",
     "/((?!login|_next/static|_next/image|favicon.ico|manifest.webmanifest|icon.svg).*)",
   ],
 };
