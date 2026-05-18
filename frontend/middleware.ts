@@ -49,9 +49,11 @@ export async function middleware(request: NextRequest) {
   }
 
   // Auth gate — redirect to /login if the cookie is missing or its JWT is expired.
+  // NextResponse.redirect does not auto-prepend basePath, so build the path manually.
   const tokenCookie = request.cookies.get("auth_token");
   if (!isAuthTokenUsable(tokenCookie?.value)) {
-    const response = NextResponse.redirect(new URL("/login", request.url));
+    const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+    const response = NextResponse.redirect(new URL(`${basePath}/login`, request.url));
     if (tokenCookie) {
       response.cookies.delete("auth_token");
     }
