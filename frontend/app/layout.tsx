@@ -10,9 +10,15 @@ export const viewport: Viewport = {
   initialScale: 1,
 };
 
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+
 export const metadata: Metadata = {
   title: "Portfolio Manager",
   description: "B3 import, holdings review, and portfolio analysis.",
+  // Set an explicit icon so the browser doesn't fall back to /favicon.ico
+  // at the page origin's root — on davinomjr.com that resolves to an
+  // unrelated HTTP URL and triggers a mixed-content block.
+  icons: { icon: `${basePath}/icon.svg` },
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
