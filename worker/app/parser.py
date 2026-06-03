@@ -11,6 +11,26 @@ from zipfile import ZipFile
 from app.models import Holding
 
 
+# B3's consolidated position export ("Posição") ships several tabs that repeat
+# a ticker already listed in its custody sheet — dividends received, provisioned
+# events, and securities-lending (BTC) contracts. Those rows carry a Quantidade
+# column, so merging them on top of the custody quantity double-counts the
+# position (e.g. BBAS3 showing 2600 instead of 1300). Only genuine holdings
+# sheets should contribute to the parsed quantity.
+_NON_HOLDING_SHEET_MARKERS = (
+    "provento",
+    "dividendo",
+    "evento",
+    "provisionad",
+    "movimenta",
+    "negocia",
+    "lancament",
+    "lançament",
+    "emprestimo",
+    "empréstimo",
+)
+
+
 SPREADSHEET_NS = {"a": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
 REL_NS = {
     "a": "http://schemas.openxmlformats.org/spreadsheetml/2006/main",
@@ -114,6 +134,8 @@ def parse_b3_xlsx(path: Path) -> list[Holding]:
         normalized_sheet = sheet_name.strip().lower()
         if not rows:
             continue
+        if not _is_holdings_sheet(normalized_sheet):
+            continue
 
         header = rows[0]
         data_rows = rows[1:]
@@ -185,11 +207,20 @@ def _pick(columns: dict[str, int] | dict[str, str], candidates: list[str]) -> Op
     return None
 
 
+def _is_holdings_sheet(sheet_name: str) -> bool:
+    """Return True for sheets that represent actual custody holdings.
+
+    Informational tabs (dividends, provisioned events, securities lending) are
+    excluded so their repeated tickers don't inflate quantities — see
+    ``_NON_HOLDING_SHEET_MARKERS``.
+    """
+    normalized = sheet_name.strip().lower()
+    return not any(marker in normalized for marker in _NON_HOLDING_SHEET_MARKERS)
+
+
 def _sheet_asset_type(sheet_name: str, ticker: str, security_type: Optional[str] = None) -> str:
     if "tesouro" in sheet_name:
         return "government_bond"
-    if "empréstimo" in sheet_name or "emprestimo" in sheet_name:
-        return "stock"
     if "fundo de investimento" in sheet_name:
         return "fund"
     if sheet_name == "etf":
