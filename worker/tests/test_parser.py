@@ -96,20 +96,32 @@ def test_informational_sheet_does_not_double_count(tmp_path: Path):
     assert by_ticker["BBAS3"].quantity == 1300
 
 
-def test_lending_sheet_is_counted(tmp_path: Path):
-    """Lent shares appear only in the lending tab and must be added back."""
-    header = ["Código de Negociação", "Quantidade", "Preço de Fechamento"]
+def test_lending_doador_modality_is_ignored(tmp_path: Path):
+    """Lender-side (Modalidade D1) lending rows duplicate custody — skip them."""
+    header = ["Código de Negociação", "Quantidade", "Preço de Fechamento", "Instituição", "Modalidade"]
     sheets = {
-        "Acoes": [header, ["BBAS3", 1000, "10.00"]],
-        # Lent shares are netted out of custody — count them.
-        "Empréstimo de Ativos": [header, ["BBAS3", 300, "10.00"]],
+        "Acoes": [["Código de Negociação", "Quantidade", "Preço de Fechamento"], ["BBAS3", 1300, "10.00"]],
+        # Lent-out shares still counted in Acoes — must be ignored here.
+        "Empréstimo de Ativos": [header, ["BBAS3", 1300, "10.00", "XP", "D1"]],
     }
     path = tmp_path / "posicao.xlsx"
     path.write_bytes(_build_xlsx(sheets))
 
-    holdings = parse_b3_xlsx(path)
-    by_ticker = {h.ticker: h for h in holdings}
+    by_ticker = {h.ticker: h for h in parse_b3_xlsx(path)}
+    assert by_ticker["BBAS3"].quantity == 1300
 
+
+def test_lending_non_doador_modality_is_counted(tmp_path: Path):
+    """Lending rows with other modalities are genuine holdings — keep them."""
+    header = ["Código de Negociação", "Quantidade", "Preço de Fechamento", "Instituição", "Modalidade"]
+    sheets = {
+        "Acoes": [["Código de Negociação", "Quantidade", "Preço de Fechamento"], ["BBAS3", 1000, "10.00"]],
+        "Empréstimo de Ativos": [header, ["BBAS3", 300, "10.00", "XP", "C"]],
+    }
+    path = tmp_path / "posicao.xlsx"
+    path.write_bytes(_build_xlsx(sheets))
+
+    by_ticker = {h.ticker: h for h in parse_b3_xlsx(path)}
     assert by_ticker["BBAS3"].quantity == 1300
 
 
@@ -151,6 +163,7 @@ if __name__ == "__main__":
     test_merge_holdings_sums_same_key()
     with tempfile.TemporaryDirectory() as d:
         test_informational_sheet_does_not_double_count(Path(d))
-        test_lending_sheet_is_counted(Path(d))
+        test_lending_doador_modality_is_ignored(Path(d))
+        test_lending_non_doador_modality_is_counted(Path(d))
         test_multiple_brokers_in_acoes_still_sum(Path(d))
     print("ok")

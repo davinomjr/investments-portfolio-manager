@@ -153,11 +153,20 @@ def parse_b3_xlsx(path: Path) -> list[Holding]:
         updated_value_col = _pick(columns, ["valor atualizado", "valor bruto", "valor líquido", "valor liquido"])
         type_col = _pick(columns, ["tipo", "classe"])
         tax_id_col = _pick(columns, ["cnpj da empresa", "cnpj do fundo", "cnpj", "cpf/cnpj"])
+        modality_col = _pick(columns, ["modalidade"])
 
         if quantity_col is None:
             continue
 
         for row in data_rows:
+            # On the securities-lending ("Empréstimo de Ativos") tab, the
+            # "Modalidade" column flags the lender side (D1 = doador). Those
+            # shares stay listed at full quantity in the custody (Ações) sheet,
+            # so counting the lending row too would double the position. Skip
+            # them; keep every other modality (genuine lent-only holdings).
+            if modality_col is not None and _is_ignored_modality(_row_value(row, modality_col)):
+                continue
+
             ticker = _derive_ticker(
                 row=row,
                 sheet_name=normalized_sheet,
@@ -207,6 +216,17 @@ def _pick(columns: dict[str, int] | dict[str, str], candidates: list[str]) -> Op
         if normalized in normalized_candidates:
             return original
     return None
+
+
+# Securities-lending modalities whose shares are already reflected in the
+# custody sheet and must not be counted again. "D1" is the lender (doador) side.
+_IGNORED_LENDING_MODALITIES = {"D1"}
+
+
+def _is_ignored_modality(value: object) -> bool:
+    if value is None:
+        return False
+    return str(value).strip().upper() in _IGNORED_LENDING_MODALITIES
 
 
 def _is_holdings_sheet(sheet_name: str) -> bool:
