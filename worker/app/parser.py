@@ -11,12 +11,16 @@ from zipfile import ZipFile
 from app.models import Holding
 
 
-# B3's consolidated position export ("Posição") ships several tabs that repeat
-# a ticker already listed in its custody sheet — dividends received, provisioned
-# events, and securities-lending (BTC) contracts. Those rows carry a Quantidade
-# column, so merging them on top of the custody quantity double-counts the
-# position (e.g. BBAS3 showing 2600 instead of 1300). Only genuine holdings
-# sheets should contribute to the parsed quantity.
+# B3's consolidated position export ("Posição") ships informational tabs that
+# repeat a ticker already listed in its custody sheet — dividends received and
+# provisioned events. Those rows carry a Quantidade column, so merging them on
+# top of the custody quantity double-counts the position (e.g. BBAS3 showing
+# 2600 instead of 1300). Only genuine holdings sheets should contribute to the
+# parsed quantity.
+#
+# NOTE: securities lending ("Empréstimo de Ativos" / BTC) is NOT listed here.
+# Lent shares are netted out of the custody (Ações) sheet and appear only in the
+# lending tab, so it represents real ownership and must still be counted.
 _NON_HOLDING_SHEET_MARKERS = (
     "provento",
     "dividendo",
@@ -26,8 +30,6 @@ _NON_HOLDING_SHEET_MARKERS = (
     "negocia",
     "lancament",
     "lançament",
-    "emprestimo",
-    "empréstimo",
 )
 
 
@@ -221,6 +223,9 @@ def _is_holdings_sheet(sheet_name: str) -> bool:
 def _sheet_asset_type(sheet_name: str, ticker: str, security_type: Optional[str] = None) -> str:
     if "tesouro" in sheet_name:
         return "government_bond"
+    if "empréstimo" in sheet_name or "emprestimo" in sheet_name:
+        # Lent shares are real equity holdings netted out of the custody sheet.
+        return "stock"
     if "fundo de investimento" in sheet_name:
         return "fund"
     if sheet_name == "etf":

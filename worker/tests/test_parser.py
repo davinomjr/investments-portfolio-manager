@@ -70,20 +70,21 @@ def test_is_holdings_sheet():
     assert _is_holdings_sheet("Acoes")
     assert _is_holdings_sheet("BDR")
     assert _is_holdings_sheet("Tesouro Direto")
-    # Informational / lending tabs must be skipped.
-    assert not _is_holdings_sheet("Empréstimo de Ativos")
-    assert not _is_holdings_sheet("Emprestimo de Ativos")
+    # Securities lending is real ownership netted out of custody — keep it.
+    assert _is_holdings_sheet("Empréstimo de Ativos")
+    assert _is_holdings_sheet("Emprestimo de Ativos")
+    # Purely informational tabs must be skipped.
     assert not _is_holdings_sheet("Proventos Recebidos")
     assert not _is_holdings_sheet("Eventos Provisionados")
 
 
-def test_lending_sheet_does_not_double_count(tmp_path: Path):
-    """A ticker listed in both Acoes and Empréstimo must not be summed."""
+def test_informational_sheet_does_not_double_count(tmp_path: Path):
+    """A ticker repeated in an informational tab must not be summed in."""
     header = ["Código de Negociação", "Quantidade", "Preço de Fechamento"]
     sheets = {
         "Acoes": [header, ["BBAS3", 1300, "10.00"]],
-        # B3 repeats the lent shares here — must be ignored.
-        "Empréstimo de Ativos": [header, ["BBAS3", 1300, "10.00"]],
+        # B3 repeats the custody ticker here — must be ignored.
+        "Eventos Provisionados": [header, ["BBAS3", 1300, "10.00"]],
     }
     path = tmp_path / "posicao.xlsx"
     path.write_bytes(_build_xlsx(sheets))
@@ -92,6 +93,23 @@ def test_lending_sheet_does_not_double_count(tmp_path: Path):
     by_ticker = {h.ticker: h for h in holdings}
 
     assert "BBAS3" in by_ticker
+    assert by_ticker["BBAS3"].quantity == 1300
+
+
+def test_lending_sheet_is_counted(tmp_path: Path):
+    """Lent shares appear only in the lending tab and must be added back."""
+    header = ["Código de Negociação", "Quantidade", "Preço de Fechamento"]
+    sheets = {
+        "Acoes": [header, ["BBAS3", 1000, "10.00"]],
+        # Lent shares are netted out of custody — count them.
+        "Empréstimo de Ativos": [header, ["BBAS3", 300, "10.00"]],
+    }
+    path = tmp_path / "posicao.xlsx"
+    path.write_bytes(_build_xlsx(sheets))
+
+    holdings = parse_b3_xlsx(path)
+    by_ticker = {h.ticker: h for h in holdings}
+
     assert by_ticker["BBAS3"].quantity == 1300
 
 
@@ -132,6 +150,7 @@ if __name__ == "__main__":
     test_is_holdings_sheet()
     test_merge_holdings_sums_same_key()
     with tempfile.TemporaryDirectory() as d:
-        test_lending_sheet_does_not_double_count(Path(d))
+        test_informational_sheet_does_not_double_count(Path(d))
+        test_lending_sheet_is_counted(Path(d))
         test_multiple_brokers_in_acoes_still_sum(Path(d))
     print("ok")
