@@ -587,3 +587,60 @@ func TestUpsertHoldingsKeepsOtherSources(t *testing.T) {
 		t.Errorf("expected both positions to survive across sources, got %d", count)
 	}
 }
+
+func TestUpsertHoldingsRejectsPartialSyncThatWouldWipeMostPositions(t *testing.T) {
+	svc := newTestServiceWithConfig(t, config.Config{DefaultUserID: 1})
+	ctx := context.Background()
+
+	tickers := []string{"PETR4", "VALE3", "ITUB4", "BBAS3", "WEGE3"}
+	for _, ticker := range tickers {
+		seedFullPosition(t, svc, ticker, "stock", 10, 30.0, "", "b3", false, -60)
+	}
+
+	// Simulate a B3 extractor failure (e.g. a failed XLSX download that fell
+	// back to scraping a paginated table) that only surfaces one holding.
+	partial := []models.HoldingPayload{
+		{Ticker: "PETR4", Quantity: 10, AveragePrice: 30.0, AssetType: "stock", Currency: "BRL"},
+	}
+	if err := svc.upsertHoldings(ctx, partial, "b3"); err == nil {
+		t.Fatalf("expected upsertHoldings to reject a sync that would delete most positions")
+	}
+
+	positions, err := svc.GetPositions(ctx)
+	if err != nil {
+		t.Fatalf("GetPositions: %v", err)
+	}
+	if len(positions) != len(tickers) {
+		t.Fatalf("expected all %d original positions to survive a rejected sync, got %d", len(tickers), len(positions))
+	}
+}
+
+func TestUpsertHoldingsAllowsPartialSellOffBelowGuardThreshold(t *testing.T) {
+	svc := newTestServiceWithConfig(t, config.Config{DefaultUserID: 1})
+	ctx := context.Background()
+
+	tickers := []string{"PETR4", "VALE3", "ITUB4", "BBAS3", "WEGE3"}
+	for _, ticker := range tickers {
+		seedFullPosition(t, svc, ticker, "stock", 10, 30.0, "", "b3", false, -60)
+	}
+
+	// Selling off a single holding out of five is a plausible real trade,
+	// not a broken sync, so it should still go through.
+	holdings := []models.HoldingPayload{
+		{Ticker: "PETR4", Quantity: 10, AveragePrice: 30.0, AssetType: "stock", Currency: "BRL"},
+		{Ticker: "VALE3", Quantity: 10, AveragePrice: 30.0, AssetType: "stock", Currency: "BRL"},
+		{Ticker: "ITUB4", Quantity: 10, AveragePrice: 30.0, AssetType: "stock", Currency: "BRL"},
+		{Ticker: "BBAS3", Quantity: 10, AveragePrice: 30.0, AssetType: "stock", Currency: "BRL"},
+	}
+	if err := svc.upsertHoldings(ctx, holdings, "b3"); err != nil {
+		t.Fatalf("upsertHoldings: %v", err)
+	}
+
+	positions, err := svc.GetPositions(ctx)
+	if err != nil {
+		t.Fatalf("GetPositions: %v", err)
+	}
+	if len(positions) != 4 {
+		t.Fatalf("expected the one sold position to be removed, got %d remaining", len(positions))
+	}
+}
