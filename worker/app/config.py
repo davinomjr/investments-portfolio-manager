@@ -30,6 +30,10 @@ class WorkerConfig:
     positions_path: str = "/minha-carteira/investimentos/posicao"
     login_timeout_ms: int = 120000
     session_file: Path = Path(__file__).resolve().parents[1] / "data" / "b3_session.json"
+    # Persistent Chromium user profile. Preserves cookies, localStorage, and
+    # device fingerprint across runs so B3 recognizes the device and skips
+    # 2FA on subsequent syncs.
+    profile_dir: Path = Path(__file__).resolve().parents[1] / "data" / "b3_profile"
     download_dir: Path = Path(__file__).resolve().parents[1] / "data" / "downloads"
     headless: bool = field(default_factory=lambda: os.environ.get("HEADLESS", "false").lower() in ("1", "true", "yes"))
     timeout_ms: int = 30000

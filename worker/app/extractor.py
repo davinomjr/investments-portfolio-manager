@@ -34,13 +34,19 @@ class B3PortfolioExtractor:
         self.download_dir = config.download_dir
 
     def _new_context(self, playwright, *, headless: bool, accept_downloads: bool = False):
-        """Launch browser and create a context with stealth settings."""
-        browser = playwright.chromium.launch(headless=headless, args=_STEALTH_ARGS)
-        # Always start fresh — saved sessions get rotated by B3 and cause
-        # mid-run "session expired" failures. Auto-login from .env runs every
-        # time, which is reliable.
-        context = browser.new_context(
-            storage_state=None,
+        """Launch a persistent-profile browser context with stealth settings.
+
+        Uses launch_persistent_context so cookies, localStorage, and device
+        fingerprint survive across runs. B3 uses Azure B2C which recognizes
+        the device by these cookies — reusing the profile skips the email
+        2FA challenge on subsequent syncs. Auto-login from .env still runs
+        each time and is idempotent if the session is already valid.
+        """
+        config.profile_dir.mkdir(parents=True, exist_ok=True)
+        context = playwright.chromium.launch_persistent_context(
+            user_data_dir=str(config.profile_dir),
+            headless=headless,
+            args=_STEALTH_ARGS,
             user_agent=_STEALTH_UA,
             viewport={"width": 1920, "height": 1080},
             accept_downloads=accept_downloads,
@@ -48,17 +54,16 @@ class B3PortfolioExtractor:
             locale="pt-BR",
             timezone_id="America/Sao_Paulo",
         )
-        page = context.new_page()
+        page = context.pages[0] if context.pages else context.new_page()
         page.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
-        return browser, context, page
+        return context, page
 
     def bootstrap_login(self) -> Path:
         from playwright.sync_api import sync_playwright
 
         self.session_file.parent.mkdir(parents=True, exist_ok=True)
         with sync_playwright() as playwright:
-            browser, context, page = self._new_context(playwright, headless=False)
-            page = context.new_page()
+            context, page = self._new_context(playwright, headless=False)
             # For manual login, allow Cloudflare/challenge pages to load even if the
             # initial navigation reports an HTTP response error at the network layer.
             self._goto_with_fallback(
@@ -68,8 +73,10 @@ class B3PortfolioExtractor:
                 allow_http_error=True,
             )
             page.wait_for_timeout(config.login_timeout_ms)
+            # Persistent context saves cookies/localStorage automatically on
+            # close; also dump a portable snapshot for reference.
             context.storage_state(path=str(self.session_file))
-            browser.close()
+            context.close()
         return self.session_file
 
     def import_portfolio(self) -> ImportResult:
@@ -77,37 +84,45 @@ class B3PortfolioExtractor:
 
         self.download_dir.mkdir(parents=True, exist_ok=True)
         with sync_playwright() as playwright:
-            browser, context, page = self._new_context(
+            context, page = self._new_context(
                 playwright, headless=config.headless, accept_downloads=True,
             )
-
-            # Navigate to dashboard; B3 is a React SPA that returns 404 at the
-            # network layer for all routes, so we allow HTTP errors here.
-            self._goto_with_fallback(
-                page,
-                config.portal_url + config.dashboard_path,
-                timeout_ms=config.timeout_ms,
-                allow_http_error=True,
-            )
-            # Wait for the React app to render and any client-side redirect
-            # (e.g. to investidor.b3.com.br/login when session is expired).
             try:
-                page.wait_for_load_state("networkidle", timeout=15000)
-            except Exception:
-                pass
-            # Extra pause for the SPA auth check to complete
-            page.wait_for_timeout(2000)
+                # Navigate to dashboard; B3 is a React SPA that returns 404 at
+                # the network layer for all routes, so we allow HTTP errors.
+                self._goto_with_fallback(
+                    page,
+                    config.portal_url + config.dashboard_path,
+                    timeout_ms=config.timeout_ms,
+                    allow_http_error=True,
+                )
+                # Wait for the React app to render and any client-side redirect
+                # (e.g. to investidor.b3.com.br/login when session is expired).
+                try:
+                    page.wait_for_load_state("networkidle", timeout=15000)
+                except Exception:
+                    pass
+                # Extra pause for the SPA auth check to complete
+                page.wait_for_timeout(2000)
 
-            if self._requires_login(page):
-                if config.b3_cpf and config.b3_password:
-                    self._auto_login(page, context)
-                    # Wait for the SPA auth state to fully settle before navigating
-                    page.wait_for_timeout(6000)
-                else:
-                    raise SessionExpiredError("B3 login required to refresh session.")
+                if self._requires_login(page):
+                    if config.b3_cpf and config.b3_password:
+                        self._auto_login(page, context)
+                        # Wait for the SPA auth state to fully settle before navigating
+                        page.wait_for_timeout(6000)
+                    else:
+                        raise SessionExpiredError("B3 login required to refresh session.")
 
-            holdings = self._load_holdings(context, page)
-            browser.close()
+                holdings = self._load_holdings(context, page)
+            finally:
+                # Always close the context cleanly, even on exception, so the
+                # persistent profile flushes cookies (including B3's device-
+                # recognition cookie) to disk. Otherwise the next run looks
+                # like a fresh device and 2FA gets triggered again.
+                try:
+                    context.close()
+                except Exception:
+                    pass
         return ImportResult(holdings=holdings)
 
     def import_manual_file(self, source_file: Path) -> ManualImportResult:
@@ -202,6 +217,33 @@ class B3PortfolioExtractor:
                 from pathlib import Path as _P
                 import sys as _sys
                 import time as _t
+                # Capture the 2FA page so we can see B3's exact markup and
+                # refine the "trust device" selector below on the next pass.
+                self._dump_debug_context(page, reason="2fa-page", suffix="2fa")
+
+                # Best-effort auto-check of any "trust device" / "don't ask
+                # again" toggle. B3 uses varying labels in Portuguese; try
+                # several. If none match, we still submit the code normally
+                # and 2FA will be prompted again next time.
+                trust_selectors = [
+                    "label:has-text('Confiar neste dispositivo')",
+                    "label:has-text('confiar neste dispositivo')",
+                    "label:has-text('Não pedir novamente')",
+                    "label:has-text('não pedir novamente')",
+                    "label:has-text('Lembrar deste dispositivo')",
+                    "label:has-text('Manter conectado')",
+                    "input[type='checkbox']:visible",
+                ]
+                for sel in trust_selectors:
+                    try:
+                        el = page.locator(sel).first
+                        if el.count() > 0 and el.is_visible():
+                            el.check() if sel.startswith("input") else el.click()
+                            print(f"[b3-2fa] toggled trust-device via selector: {sel}", file=_sys.stderr, flush=True)
+                            break
+                    except Exception:
+                        continue
+
                 code_file = _P("/tmp/b3-2fa-code")
                 if code_file.exists():
                     code_file.unlink()
