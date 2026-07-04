@@ -812,6 +812,25 @@ func (s *Service) upsertHoldings(ctx context.Context, holdings []models.HoldingP
 		seenAssetIDs = append(seenAssetIDs, assetID)
 	}
 
+	var existingCount int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM positions WHERE user_id=? AND source=?`, s.Config.DefaultUserID, source).Scan(&existingCount); err != nil {
+		return err
+	}
+	staleCount := existingCount - len(seenAssetIDs)
+	// A sync that would wipe out a large slice of previously known positions
+	// almost always means the extractor returned an incomplete holdings list
+	// (partial page load, failed download, table pagination, parser miss) —
+	// not that the user actually sold most of their portfolio in one sync.
+	// Refuse to delete in that case rather than silently destroying data.
+	// The absolute floor keeps small, legitimate sell-offs (e.g. 1 of 2
+	// positions) from being blocked.
+	if staleCount >= minStaleCountForGuard && float64(staleCount)/float64(existingCount) > maxStalePositionRatio {
+		return fmt.Errorf(
+			"refusing to remove %d of %d existing '%s' positions: this sync only returned %d holdings, which looks like an incomplete import rather than real sell-offs — no changes were made, please retry the sync",
+			staleCount, existingCount, source, len(holdings),
+		)
+	}
+
 	placeholders := strings.Repeat("?,", len(seenAssetIDs))
 	placeholders = placeholders[:len(placeholders)-1]
 	args := make([]any, 0, len(seenAssetIDs)+2)
@@ -826,6 +845,17 @@ func (s *Service) upsertHoldings(ctx context.Context, holdings []models.HoldingP
 
 	return tx.Commit()
 }
+
+// maxStalePositionRatio caps the fraction of a source's existing positions
+// that a single sync is allowed to delete as "no longer present". Above this,
+// combined with minStaleCountForGuard, the sync is treated as incomplete
+// rather than a legitimate mass sell-off.
+const maxStalePositionRatio = 0.3
+
+// minStaleCountForGuard is the smallest number of positions the ratio guard
+// above will act on, so selling 1 of 2 holdings (a small, legitimate 50%
+// drop) is never blocked.
+const minStaleCountForGuard = 3
 
 func defaultString(value, fallback string) string {
 	if strings.TrimSpace(value) == "" {
