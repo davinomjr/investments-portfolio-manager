@@ -18,9 +18,9 @@ from app.models import Holding
 # 2600 instead of 1300). Only genuine holdings sheets should contribute to the
 # parsed quantity.
 #
-# NOTE: securities lending ("Empréstimo de Ativos" / BTC) is NOT listed here.
-# Lent shares are netted out of the custody (Ações) sheet and appear only in the
-# lending tab, so it represents real ownership and must still be counted.
+# NOTE: securities lending ("Empréstimo(s) de Ativos" / BTC) is NOT listed
+# here — it needs row-level reconciliation against custody, not a blanket
+# skip. See _is_lending_sheet and _parse_holdings_sheet.
 _NON_HOLDING_SHEET_MARKERS = (
     "provento",
     "dividendo",
@@ -131,83 +131,108 @@ def parse_csv(path: Path) -> list[Holding]:
 def parse_b3_xlsx(path: Path) -> list[Holding]:
     workbook = _read_xlsx_workbook(path)
     holdings: list[Holding] = []
+    seen_tickers: set[str] = set()
+    lending_sheets: list[tuple[str, list[list[object]]]] = []
 
+    # Lending is parsed in a second pass, after every other sheet, so we know
+    # which tickers custody already accounted for — see _parse_holdings_sheet.
     for sheet_name, rows in workbook.items():
         normalized_sheet = sheet_name.strip().lower()
         if not rows:
             continue
         if not _is_holdings_sheet(normalized_sheet):
             continue
-
-        header = rows[0]
-        data_rows = rows[1:]
-        columns = {str(column).lower().strip(): index for index, column in enumerate(header) if str(column).strip()}
-        ticker_col = _pick(columns, ["código de negociação", "codigo de negociacao", "ticker", "código", "codigo"])
-        quantity_col = _pick(columns, ["quantidade disponível", "quantidade disponivel", "quantidade", "quantity", "qtd"])
-        price_col = _pick(columns, ["preço de fechamento", "preco de fechamento", "average_price", "pm"])
-        broker_col = _pick(columns, ["instituição", "instituicao", "corretora", "broker"])
-        product_col = _pick(columns, ["produto", "ativo", "asset"])
-        indexer_col = _pick(columns, ["indexador"])
-        maturity_col = _pick(columns, ["vencimento"])
-        invested_value_col = _pick(columns, ["valor aplicado"])
-        updated_value_col = _pick(columns, ["valor atualizado", "valor bruto", "valor líquido", "valor liquido"])
-        type_col = _pick(columns, ["tipo", "classe"])
-        tax_id_col = _pick(columns, ["cnpj da empresa", "cnpj do fundo", "cnpj", "cpf/cnpj"])
-        modality_col = _pick(columns, ["modalidade"])
-
-        if quantity_col is None:
+        if _is_lending_sheet(normalized_sheet):
+            lending_sheets.append((normalized_sheet, rows))
             continue
+        holdings.extend(_parse_holdings_sheet(normalized_sheet, rows, seen_tickers, is_lending=False))
 
-        for row in data_rows:
-            # On the securities-lending ("Empréstimo de Ativos") tab, the
-            # "Modalidade" column flags the lender side (D1 = doador). Those
-            # shares stay listed at full quantity in the custody (Ações) sheet,
-            # so counting the lending row too would double the position. Skip
-            # them; keep every other modality (genuine lent-only holdings).
-            if modality_col is not None and _is_ignored_modality(_row_value(row, modality_col)):
-                continue
-
-            ticker = _derive_ticker(
-                row=row,
-                sheet_name=normalized_sheet,
-                ticker_col=ticker_col,
-                product_col=product_col,
-                indexer_col=indexer_col,
-                maturity_col=maturity_col,
-            )
-            if not ticker or ticker == "TOTAL":
-                continue
-
-            quantity = parse_quantity(_row_value(row, quantity_col))
-            if quantity <= 0:
-                continue
-
-            average_price = parse_currency(_row_value(row, price_col)) if price_col is not None else 0.0
-            if updated_value_col is not None and ("tesouro" in normalized_sheet):
-                updated_value = parse_currency(_row_value(row, updated_value_col))
-                if updated_value > 0:
-                    average_price = (updated_value / quantity) if quantity else 0.0
-            if average_price <= 0 and invested_value_col is not None:
-                invested_value = parse_currency(_row_value(row, invested_value_col))
-                average_price = (invested_value / quantity) if quantity else 0.0
-
-            holdings.append(
-                Holding(
-                    ticker=ticker,
-                    quantity=quantity,
-                    average_price=average_price,
-                    broker=_optional_text(_row_value(row, broker_col)) if broker_col is not None else None,
-                    asset_type=_sheet_asset_type(
-                        sheet_name=normalized_sheet,
-                        ticker=ticker,
-                        security_type=_optional_text(_row_value(row, type_col)) if type_col is not None else None,
-                    ),
-                    company_name=_derive_company_name(_row_value(row, product_col)),
-                    tax_id=_normalize_tax_id(_row_value(row, tax_id_col)) if tax_id_col is not None else None,
-                )
-            )
+    for normalized_sheet, rows in lending_sheets:
+        holdings.extend(_parse_holdings_sheet(normalized_sheet, rows, seen_tickers, is_lending=True))
 
     return _merge_holdings(holdings)
+
+
+def _parse_holdings_sheet(
+    normalized_sheet: str,
+    rows: list[list[object]],
+    seen_tickers: set[str],
+    *,
+    is_lending: bool,
+) -> list[Holding]:
+    header = rows[0]
+    data_rows = rows[1:]
+    holdings: list[Holding] = []
+    columns = {str(column).lower().strip(): index for index, column in enumerate(header) if str(column).strip()}
+    ticker_col = _pick(columns, ["código de negociação", "codigo de negociacao", "ticker", "código", "codigo"])
+    quantity_col = _pick(columns, ["quantidade disponível", "quantidade disponivel", "quantidade", "quantity", "qtd"])
+    price_col = _pick(columns, ["preço de fechamento", "preco de fechamento", "average_price", "pm"])
+    broker_col = _pick(columns, ["instituição", "instituicao", "corretora", "broker"])
+    product_col = _pick(columns, ["produto", "ativo", "asset"])
+    indexer_col = _pick(columns, ["indexador"])
+    maturity_col = _pick(columns, ["vencimento"])
+    invested_value_col = _pick(columns, ["valor aplicado"])
+    updated_value_col = _pick(columns, ["valor atualizado", "valor bruto", "valor líquido", "valor liquido"])
+    type_col = _pick(columns, ["tipo", "classe"])
+    tax_id_col = _pick(columns, ["cnpj da empresa", "cnpj do fundo", "cnpj", "cpf/cnpj"])
+
+    if quantity_col is None:
+        return holdings
+
+    for row in data_rows:
+        ticker = _derive_ticker(
+            row=row,
+            sheet_name=normalized_sheet,
+            ticker_col=ticker_col,
+            product_col=product_col,
+            indexer_col=indexer_col,
+            maturity_col=maturity_col,
+        )
+        if not ticker or ticker == "TOTAL":
+            continue
+
+        # A lent-out position is either fully reported in custody (the
+        # lending row then duplicates it) or fully absent from custody (B3
+        # nets it out there and the lending tab is its only record) — which
+        # one varies per position, not per the row's "Modalidade" value. The
+        # reliable signal is whether a non-lending sheet already produced
+        # this ticker.
+        if is_lending and ticker in seen_tickers:
+            continue
+
+        quantity = parse_quantity(_row_value(row, quantity_col))
+        if quantity <= 0:
+            continue
+
+        average_price = parse_currency(_row_value(row, price_col)) if price_col is not None else 0.0
+        if updated_value_col is not None and ("tesouro" in normalized_sheet):
+            updated_value = parse_currency(_row_value(row, updated_value_col))
+            if updated_value > 0:
+                average_price = (updated_value / quantity) if quantity else 0.0
+        if average_price <= 0 and invested_value_col is not None:
+            invested_value = parse_currency(_row_value(row, invested_value_col))
+            average_price = (invested_value / quantity) if quantity else 0.0
+
+        if not is_lending:
+            seen_tickers.add(ticker)
+
+        holdings.append(
+            Holding(
+                ticker=ticker,
+                quantity=quantity,
+                average_price=average_price,
+                broker=_optional_text(_row_value(row, broker_col)) if broker_col is not None else None,
+                asset_type=_sheet_asset_type(
+                    sheet_name=normalized_sheet,
+                    ticker=ticker,
+                    security_type=_optional_text(_row_value(row, type_col)) if type_col is not None else None,
+                ),
+                company_name=_derive_company_name(_row_value(row, product_col)),
+                tax_id=_normalize_tax_id(_row_value(row, tax_id_col)) if tax_id_col is not None else None,
+            )
+        )
+
+    return holdings
 
 
 def _pick(columns: dict[str, int] | dict[str, str], candidates: list[str]) -> Optional[object]:
@@ -218,26 +243,29 @@ def _pick(columns: dict[str, int] | dict[str, str], candidates: list[str]) -> Op
     return None
 
 
-# Securities-lending modalities whose shares are already reflected in the
-# custody sheet and must not be counted again. "D1" is the lender (doador) side.
-_IGNORED_LENDING_MODALITIES = {"D1"}
-
-
-def _is_ignored_modality(value: object) -> bool:
-    if value is None:
-        return False
-    return str(value).strip().upper() in _IGNORED_LENDING_MODALITIES
-
-
 def _is_holdings_sheet(sheet_name: str) -> bool:
     """Return True for sheets that represent actual custody holdings.
 
-    Informational tabs (dividends, provisioned events, securities lending) are
-    excluded so their repeated tickers don't inflate quantities — see
+    Informational tabs (dividends, provisioned events) are excluded so their
+    repeated tickers don't inflate quantities — see
     ``_NON_HOLDING_SHEET_MARKERS``.
     """
     normalized = sheet_name.strip().lower()
     return not any(marker in normalized for marker in _NON_HOLDING_SHEET_MARKERS)
+
+
+def _is_lending_sheet(sheet_name: str) -> bool:
+    """Return True for the securities-lending ("Empréstimo(s) de Ativos") tab.
+
+    A lent-out position is either fully repeated in the custody sheet (the
+    lending row then duplicates it) or fully netted out of custody (the
+    lending row is its only record) — B3 does both depending on the
+    position, regardless of the row's "Modalidade" value. Parsing this sheet
+    last, and skipping tickers already seen elsewhere, resolves both cases
+    without relying on Modalidade.
+    """
+    normalized = sheet_name.strip().lower()
+    return "empréstimo" in normalized or "emprestimo" in normalized
 
 
 def _sheet_asset_type(sheet_name: str, ticker: str, security_type: Optional[str] = None) -> str:
