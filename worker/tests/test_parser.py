@@ -96,13 +96,19 @@ def test_informational_sheet_does_not_double_count(tmp_path: Path):
     assert by_ticker["BBAS3"].quantity == 1300
 
 
-def test_lending_doador_modality_is_ignored(tmp_path: Path):
-    """Lender-side (Modalidade D1) lending rows duplicate custody — skip them."""
+def test_lending_row_duplicating_custody_is_ignored(tmp_path: Path):
+    """A ticker already fully reported in custody must not be doubled by lending.
+
+    Real B3 exports sometimes repeat a lent-out position at full quantity in
+    both the custody (Ações) sheet and the lending tab. Whether that happens
+    is per-position, not indicated by "Modalidade" (D1 can appear on either a
+    duplicated or a netted-out row) — the reliable signal is whether the
+    ticker was already produced by a non-lending sheet.
+    """
     header = ["Código de Negociação", "Quantidade", "Preço de Fechamento", "Instituição", "Modalidade"]
     sheets = {
         "Acoes": [["Código de Negociação", "Quantidade", "Preço de Fechamento"], ["BBAS3", 1300, "10.00"]],
-        # Lent-out shares still counted in Acoes — must be ignored here.
-        "Empréstimo de Ativos": [header, ["BBAS3", 1300, "10.00", "XP", "D1"]],
+        "Empréstimos": [header, ["BBAS3", 1300, "10.00", "XP", "D1"]],
     }
     path = tmp_path / "posicao.xlsx"
     path.write_bytes(_build_xlsx(sheets))
@@ -111,18 +117,26 @@ def test_lending_doador_modality_is_ignored(tmp_path: Path):
     assert by_ticker["BBAS3"].quantity == 1300
 
 
-def test_lending_non_doador_modality_is_counted(tmp_path: Path):
-    """Lending rows with other modalities are genuine holdings — keep them."""
+def test_lending_only_position_is_counted_regardless_of_modality(tmp_path: Path):
+    """A ticker absent from custody is real, on-loan-only ownership — keep it.
+
+    This is the EGIE3 regression: B3 nets a fully lent-out position out of
+    the Ações sheet entirely, so its only record is the lending tab, with
+    Modalidade=D1 (lender/doador) — the same value seen on the duplicated
+    BBAS3 row above. Modality alone can't distinguish the two cases; ticker
+    presence in custody can.
+    """
     header = ["Código de Negociação", "Quantidade", "Preço de Fechamento", "Instituição", "Modalidade"]
     sheets = {
         "Acoes": [["Código de Negociação", "Quantidade", "Preço de Fechamento"], ["BBAS3", 1000, "10.00"]],
-        "Empréstimo de Ativos": [header, ["BBAS3", 300, "10.00", "XP", "C"]],
+        "Empréstimos": [header, ["EGIE3", 800, "32.14", "XP", "D1"]],
     }
     path = tmp_path / "posicao.xlsx"
     path.write_bytes(_build_xlsx(sheets))
 
     by_ticker = {h.ticker: h for h in parse_b3_xlsx(path)}
-    assert by_ticker["BBAS3"].quantity == 1300
+    assert by_ticker["BBAS3"].quantity == 1000
+    assert by_ticker["EGIE3"].quantity == 800
 
 
 def test_multiple_brokers_in_acoes_still_sum(tmp_path: Path):
@@ -163,7 +177,7 @@ if __name__ == "__main__":
     test_merge_holdings_sums_same_key()
     with tempfile.TemporaryDirectory() as d:
         test_informational_sheet_does_not_double_count(Path(d))
-        test_lending_doador_modality_is_ignored(Path(d))
-        test_lending_non_doador_modality_is_counted(Path(d))
+        test_lending_row_duplicating_custody_is_ignored(Path(d))
+        test_lending_only_position_is_counted_regardless_of_modality(Path(d))
         test_multiple_brokers_in_acoes_still_sum(Path(d))
     print("ok")
