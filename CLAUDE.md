@@ -315,3 +315,15 @@ Paste the output into Railway Variables **without quotes**.
 ### What does NOT work in production
 
 - **B3 browser sync** — requires an interactive Playwright session with a real browser. Only works locally. IBKR Flex sync and manual file upload work fine in production.
+
+### Daily local sync (B3 + IBKR) — debugging
+
+The user runs a daily B3 + IBKR sync from a Mac launchd LaunchAgent (`com.davinomjr.investments-sync`, fires 07:00, runs `scripts/push-portfolio.sh`). If the user reports "sync isn't working" or similar, **read the full debug playbook first**:
+
+```
+~/.claude/projects/-Users-davinomjr-dev-investments-portfolio-manager/memory/reference_daily_sync.md
+```
+
+It covers: log paths (`~/Library/Logs/investments-sync.{out,err}.log`), worker debug artifact naming (`b3_debug_*` screenshots/HTML), the `[b3-debug] markers={...}` diagnostic line, retry/gating semantics between B3 and IBKR, and known failure modes (Azure B2C DNS/Chromium issue fixed by reboot; B3 outage-notice modal fixed via `_dismiss_notice_modal`).
+
+Also see `~/.claude/projects/-Users-davinomjr-dev-investments-portfolio-manager/memory/feedback_dont_pivot_away.md`: once the user commits to a hard debugging path, stick with it — don't unsolicited-recommend pivoting to an easier alternative.
