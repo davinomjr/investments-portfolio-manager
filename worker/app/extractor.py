@@ -107,7 +107,7 @@ class B3PortfolioExtractor:
 
                 if self._requires_login(page):
                     if config.b3_cpf and config.b3_password:
-                        self._auto_login(page, context)
+                        page = self._auto_login(page, context)
                         # Wait for the SPA auth state to fully settle before navigating
                         page.wait_for_timeout(6000)
                     else:
@@ -150,7 +150,100 @@ class B3PortfolioExtractor:
             self._dump_debug_context(page, reason="scrape-empty")
         return holdings
 
-    def _auto_login(self, page: "Page", context: "BrowserContext") -> None:
+    def _fetch_otp_from_gmail(self, since_ts: float):
+        """Poll Gmail via IMAP for the freshest B3 2FA email and extract the 6-digit code.
+
+        Returns the code string, or None if nothing matching was found. Requires
+        B3_IMAP_USER and B3_IMAP_APP_PASSWORD in the environment (a Gmail app
+        password — spaces are stripped so either format works).
+        """
+        import imaplib
+        import email as _email
+        import email.policy as _epol
+        from email.utils import parsedate_to_datetime
+        import os as _os
+        import re as _re
+        import sys as _sys
+        import time as _time
+        from html import unescape
+
+        user = (_os.environ.get("B3_IMAP_USER") or "").strip()
+        pw = (_os.environ.get("B3_IMAP_APP_PASSWORD") or "").replace(" ", "").strip()
+        if not user or not pw:
+            return None
+
+        try:
+            conn = imaplib.IMAP4_SSL("imap.gmail.com", 993, timeout=15)
+        except Exception as exc:
+            print(f"[b3-2fa-imap] connect failed: {type(exc).__name__}: {exc}", file=_sys.stderr, flush=True)
+            return None
+        try:
+            conn.login(user, pw)
+            conn.select("INBOX")
+            # IMAP SINCE is date-only; use yesterday to include emails just before midnight UTC.
+            since_str = _time.strftime("%d-%b-%Y", _time.gmtime(since_ts - 86400))
+            typ, data = conn.search(
+                None,
+                f'(FROM "noreply@b3.com.br" SINCE "{since_str}")',
+            )
+            if typ != "OK" or not data or not data[0]:
+                return None
+            ids = data[0].split()
+            for uid in reversed(ids[-20:]):
+                typ, msg_data = conn.fetch(uid, "(RFC822)")
+                if typ != "OK" or not msg_data or not msg_data[0]:
+                    continue
+                raw = msg_data[0][1]
+                msg = _email.message_from_bytes(raw, policy=_epol.default)
+                try:
+                    dt = parsedate_to_datetime(msg.get("Date") or "")
+                    if dt and dt.timestamp() < since_ts - 60:
+                        continue
+                except Exception:
+                    pass
+                body_text = ""
+                body_html = ""
+                if msg.is_multipart():
+                    for part in msg.walk():
+                        ctype = part.get_content_type()
+                        if ctype == "text/plain" and not body_text:
+                            try:
+                                body_text = part.get_content()
+                            except Exception:
+                                pass
+                        elif ctype == "text/html" and not body_html:
+                            try:
+                                body_html = part.get_content()
+                            except Exception:
+                                pass
+                else:
+                    try:
+                        body_text = msg.get_content()
+                    except Exception:
+                        pass
+                haystack = body_text or unescape(_re.sub(r"<[^>]+>", " ", body_html or ""))
+                m = _re.search(r"Código de segurança[^\d]{0,40}(\d{6})", haystack, _re.IGNORECASE)
+                if not m:
+                    m = _re.search(r"(?<!\d)(\d{6})(?!\d)", haystack)
+                if m:
+                    subj = msg.get("Subject") or ""
+                    print(
+                        f"[b3-2fa-imap] matched code in email subj={subj!r} uid={uid.decode() if isinstance(uid, bytes) else uid}",
+                        file=_sys.stderr,
+                        flush=True,
+                    )
+                    return m.group(1)
+            return None
+        except Exception as exc:
+            print(f"[b3-2fa-imap] fetch error: {type(exc).__name__}: {exc}", file=_sys.stderr, flush=True)
+            return None
+        finally:
+            try:
+                conn.logout()
+            except Exception:
+                pass
+
+    def _auto_login(self, page: "Page", context: "BrowserContext") -> "Page":
         """Fill CPF and password on the B3 login page automatically."""
         from playwright.sync_api import TimeoutError
 
@@ -247,14 +340,32 @@ class B3PortfolioExtractor:
                 code_file = _P("/tmp/b3-2fa-code")
                 if code_file.exists():
                     code_file.unlink()
-                print("[b3-2fa] waiting for /tmp/b3-2fa-code (max 5 min)…", file=_sys.stderr, flush=True)
+                import os as _os
+                imap_enabled = bool(
+                    (_os.environ.get("B3_IMAP_USER") or "").strip()
+                    and (_os.environ.get("B3_IMAP_APP_PASSWORD") or "").strip()
+                )
+                imap_start_ts = _t.time()
+                next_imap_check = _t.time() + 5  # give B3 a few seconds to send the email
+                if imap_enabled:
+                    print("[b3-2fa-imap] Gmail auto-fetch enabled", file=_sys.stderr, flush=True)
+                print("[b3-2fa] waiting for Gmail auto-fetch or /tmp/b3-2fa-code (max 5 min)…", file=_sys.stderr, flush=True)
                 deadline = _t.time() + 300
-                while _t.time() < deadline and not code_file.exists():
+                code = None
+                while _t.time() < deadline:
+                    if code_file.exists():
+                        code = code_file.read_text().strip()
+                        code_file.unlink()
+                        print(f"[b3-2fa] using code from /tmp/b3-2fa-code ({len(code)} digits)", file=_sys.stderr, flush=True)
+                        break
+                    if imap_enabled and _t.time() >= next_imap_check:
+                        next_imap_check = _t.time() + 5
+                        code = self._fetch_otp_from_gmail(imap_start_ts)
+                        if code:
+                            break
                     _t.sleep(2)
-                if not code_file.exists():
-                    raise SessionExpiredError("2FA code was not provided in time.")
-                code = code_file.read_text().strip()
-                code_file.unlink()
+                if not code:
+                    raise SessionExpiredError("2FA code was not obtained in time.")
                 print(f"[b3-2fa] entering code ({len(code)} digits)…", file=_sys.stderr, flush=True)
                 code_input = page.locator("input:visible").first
                 code_input.click()
@@ -287,6 +398,7 @@ class B3PortfolioExtractor:
                     pass
             self.session_file.parent.mkdir(parents=True, exist_ok=True)
             context.storage_state(path=str(self.session_file))
+            return page
         except TimeoutError as exc:
             self._dump_debug_context(page, reason="auto-login-no-redirect")
             raise SessionExpiredError("Auto-login failed — did not redirect to portfolio.") from exc
