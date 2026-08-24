@@ -1181,68 +1181,70 @@ func (s *Service) scrapeFundsExplorerFII(ctx context.Context, ticker string) *fi
 	return out
 }
 
-func scrapeFundamentusField(html, label string, isPercent bool) *float64 {
-	// Anchor on the label inside its txt span to avoid matching tooltip title attributes
-	// which may also contain the label text (e.g. "FFO Yield" appears in its own tooltip).
+// fundamentusValueWindow returns the plain-text content following a
+// "<span class="txt">label</span>" anchor, bounded to a short window and with
+// all markup stripped. A previous version grabbed the raw contents of
+// whatever "<span class="txt">" tag happened to come next, which silently
+// returns the wrong number whenever Fundamentus wraps the value cell in an
+// extra element first (a conditional highlight span, a help-tooltip icon,
+// etc.) — that's how fields like "Vacância Média" could resolve to an
+// unrelated value elsewhere on the page instead of the adjacent data cell.
+// Stripping tags and reading the first matching token from a tight window is
+// resilient to that markup drifting.
+func fundamentusValueWindow(rawHTML, label string) string {
+	anchor := `<span class="txt">` + label + `</span>`
 	// Use LastIndex because some fields (e.g. "Div. Yield", "P/VP") appear in both the
 	// general stock section and the FII-specific section of detalhes.php. The last
 	// occurrence is always the FII section, which carries the correct trailing 12M values.
-	anchor := `<span class="txt">` + label + `</span>`
-	idx := strings.LastIndex(html, anchor)
+	idx := strings.LastIndex(rawHTML, anchor)
 	if idx < 0 {
+		return ""
+	}
+	window := rawHTML[idx+len(anchor):]
+	if len(window) > 300 {
+		window = window[:300]
+	}
+	noTags := regexp.MustCompile(`(?s)<[^>]+>`).ReplaceAllString(window, " ")
+	return html.UnescapeString(noTags)
+}
+
+func scrapeFundamentusField(htmlBody, label string, isPercent bool) *float64 {
+	text := fundamentusValueWindow(htmlBody, label)
+	if text == "" {
 		return nil
 	}
-	sub := html[idx+len(anchor):]
-	spanIdx := strings.Index(sub, `<span class="txt">`)
-	if spanIdx < 0 {
-		return nil
-	}
-	sub = sub[spanIdx+len(`<span class="txt">`):]
-	endIdx := strings.Index(sub, "</span>")
-	if endIdx < 0 {
-		return nil
-	}
-	raw := strings.TrimSpace(sub[:endIdx])
 	if isPercent {
-		raw = strings.ReplaceAll(raw, "%", "")
+		return findFirstPercent(text)
 	}
+	return findFirstNumber(text)
+}
+
+// scrapeFundamentusVolume scrapes a volume/currency field where dots are
+// thousands separators (e.g. "6.100.890") rather than decimal points.
+func scrapeFundamentusVolume(htmlBody, label string) *float64 {
+	text := fundamentusValueWindow(htmlBody, label)
+	if text == "" {
+		return nil
+	}
+	match := regexp.MustCompile(`(-|[0-9]{1,3}(?:\.[0-9]{3})+(?:,[0-9]+)?|[0-9]+(?:,[0-9]+)?)`).FindStringSubmatch(text)
+	if len(match) < 2 || match[1] == "-" {
+		return nil
+	}
+	raw := strings.ReplaceAll(match[1], ".", "")
 	raw = strings.ReplaceAll(raw, ",", ".")
-	v, err := strconv.ParseFloat(strings.TrimSpace(raw), 64)
+	v, err := strconv.ParseFloat(raw, 64)
 	if err != nil {
 		return nil
 	}
 	return &v
 }
 
-// scrapeFundamentusVolume scrapes a volume/currency field where dots are
-// thousands separators (e.g. "6.100.890") rather than decimal points.
-// Uses LastIndex for the same reason as scrapeFundamentusField: some labels
-// appear in both the stock and FII sections; the last occurrence is the FII one.
-func scrapeFundamentusVolume(html, label string) *float64 {
-	anchor := `<span class="txt">` + label + `</span>`
-	idx := strings.LastIndex(html, anchor)
-	if idx < 0 {
+func findFirstPercent(text string) *float64 {
+	match := regexp.MustCompile(`(-|[0-9]{1,3}(?:\.[0-9]{3})*(?:,[0-9]+)?|[0-9]+(?:,[0-9]+)?)\s*%`).FindStringSubmatch(text)
+	if len(match) < 2 || match[1] == "-" {
 		return nil
 	}
-	sub := html[idx+len(anchor):]
-	spanIdx := strings.Index(sub, `<span class="txt">`)
-	if spanIdx < 0 {
-		return nil
-	}
-	sub = sub[spanIdx+len(`<span class="txt">`):]
-	endIdx := strings.Index(sub, "</span>")
-	if endIdx < 0 {
-		return nil
-	}
-	raw := strings.TrimSpace(sub[:endIdx])
-	// Strip thousands-separator dots, replace decimal comma with dot
-	raw = strings.ReplaceAll(raw, ".", "")
-	raw = strings.ReplaceAll(raw, ",", ".")
-	v, err := strconv.ParseFloat(strings.TrimSpace(raw), 64)
-	if err != nil {
-		return nil
-	}
-	return &v
+	return parseBrazilianNumber(match[1])
 }
 
 // scrapeStatusInvestFII fetches primary FII metrics from statusinvest.com.br.
@@ -1519,7 +1521,7 @@ func (s *Service) GetLatestFIIResults(ctx context.Context) (models.FIIResultsRes
 		SELECT DISTINCT a.id, a.ticker, a.asset_type, COALESCE(m.company_name,''), COALESCE(m.tax_id,'')
 		FROM positions p JOIN assets a ON p.asset_id = a.id
 		LEFT JOIN asset_metadata m ON a.id = m.asset_id
-		WHERE p.source='b3' AND a.asset_type IN ('fii','etf_or_fii','fund')`)
+		WHERE p.source='b3' AND a.asset_type IN ('fii','etf_or_fii','fund') AND a.ticker LIKE '%11'`)
 	if err != nil {
 		return models.FIIResultsResponse{}, err
 	}
@@ -1539,10 +1541,13 @@ func (s *Service) GetLatestFIIResults(ctx context.Context) (models.FIIResultsRes
 		return models.FIIResultsResponse{Items: []models.FIIResultItem{}}, nil
 	}
 	tickers := make([]string, 0, len(tracked))
+	quoteRequests := make([]quoteRequest, 0, len(tracked))
 	for _, asset := range tracked {
 		tickers = append(tickers, asset.Ticker)
+		quoteRequests = append(quoteRequests, quoteRequest{AssetID: asset.AssetID, Ticker: asset.Ticker, Currency: "BRL", AssetType: asset.AssetType})
 	}
 	metricsMap := s.fetchFIIMetrics(ctx, tickers)
+	quotes := s.FetchQuotes(ctx, quoteRequests)
 	items := make([]models.FIIResultItem, 0, len(tracked))
 	for _, asset := range tracked {
 		scraped := metricsMap[strings.ToUpper(asset.Ticker)]
@@ -1551,6 +1556,10 @@ func (s *Service) GetLatestFIIResults(ctx context.Context) (models.FIIResultsRes
 			CompanyName: asset.CompanyName,
 			AssetType:   asset.AssetType,
 			Status:      "ok",
+		}
+		if q, ok := quotes[asset.Ticker]; ok && q.LastPrice > 0 {
+			price := q.LastPrice
+			item.Price = &price
 		}
 		if scraped != nil {
 			item.DividendYield = scraped.DividendYield
