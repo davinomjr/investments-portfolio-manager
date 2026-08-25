@@ -123,6 +123,7 @@ type FIIResultItem struct {
 	Ticker          string   `json:"ticker"`
 	CompanyName     string   `json:"company_name,omitempty"`
 	AssetType       string   `json:"asset_type"`
+	Price           *float64 `json:"price"`
 	DividendYield   *float64 `json:"dividend_yield"`
 	PVP             *float64 `json:"pvp"`
 	FFOYield        *float64 `json:"ffo_yield"`

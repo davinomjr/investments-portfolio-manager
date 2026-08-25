@@ -87,6 +87,7 @@ export type FIIResultItem = {
   ticker: string;
   company_name: string | null;
   asset_type: string;
+  price: number | null;
   dividend_yield: number | null;
   pvp: number | null;
   ffo_yield: number | null;
