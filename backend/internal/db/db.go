@@ -125,6 +125,20 @@ func Migrate(database *sql.DB) error {
 			fetched_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			FOREIGN KEY(asset_id) REFERENCES assets(id) ON DELETE CASCADE
 		);`,
+		`CREATE TABLE IF NOT EXISTS position_snapshots (
+			snapshot_date TEXT NOT NULL,
+			ticker TEXT NOT NULL,
+			asset_type TEXT NOT NULL,
+			currency TEXT NOT NULL DEFAULT 'BRL',
+			quantity REAL NOT NULL,
+			avg_price REAL NOT NULL,
+			last_price REAL,
+			cost_basis_brl REAL NOT NULL,
+			market_value_brl REAL NOT NULL,
+			quote_status TEXT NOT NULL,
+			captured_at TEXT NOT NULL,
+			PRIMARY KEY(snapshot_date, ticker)
+		);`,
 	}
 	for _, stmt := range stmts {
 		if _, err := database.Exec(stmt); err != nil {

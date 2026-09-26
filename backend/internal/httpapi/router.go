@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"investments-portfolio-manager/backend/internal/auth"
@@ -38,6 +39,7 @@ func New(svc *services.Service, cfg config.Config) http.Handler {
 	// Authenticated routes
 	authed := http.NewServeMux()
 	authed.HandleFunc("GET /portfolio", server.handlePortfolio)
+	authed.HandleFunc("GET /portfolio/history", server.handlePortfolioHistory)
 	authed.HandleFunc("GET /positions", server.handlePositions)
 	authed.HandleFunc("PATCH /positions/visibility", server.handleSetPositionsVisibility)
 	authed.HandleFunc("GET /stocks/latest-results", server.handleLatestResults)
@@ -139,6 +141,20 @@ func (s *Server) withAuth(next http.Handler) http.Handler {
 
 func (s *Server) handlePortfolio(w http.ResponseWriter, r *http.Request) {
 	resp, err := s.Service.GetPortfolio(r.Context())
+	writeJSON(w, resp, err, http.StatusOK)
+}
+
+func (s *Server) handlePortfolioHistory(w http.ResponseWriter, r *http.Request) {
+	days := 0
+	if raw := r.URL.Query().Get("days"); raw != "" {
+		n, err := strconv.Atoi(raw)
+		if err != nil || n < 0 {
+			writeErr(w, "days must be a non-negative integer", http.StatusBadRequest)
+			return
+		}
+		days = n
+	}
+	resp, err := s.Service.GetPortfolioHistory(r.Context(), days)
 	writeJSON(w, resp, err, http.StatusOK)
 }
 

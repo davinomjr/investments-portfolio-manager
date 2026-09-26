@@ -168,6 +168,7 @@ Managed automatically by Go migrations in `internal/db/db.go`. Tables:
 | `sentiment_snapshots` | Cached sentiment scores with TTL |
 | `sentiment_sources` | Individual data points feeding a snapshot |
 | `sentiment_refresh_log` | Audit trail for sentiment refreshes |
+| `position_snapshots` | One row per position per day (BRT), written after each successful sync; feeds the growth chart |
 
 Reference DDL for the original PostgreSQL design is in `database/init.sql` (not used at runtime).
 
@@ -179,6 +180,7 @@ Reference DDL for the original PostgreSQL design is in `database/init.sql` (not 
 |--------|------|-------------|
 | `GET` | `/portfolio` | Aggregated portfolio summary |
 | `GET` | `/positions` | All current positions |
+| `GET` | `/portfolio/history` | Daily portfolio value, invested amount, and value by asset type (`?days=N` optional) |
 | `GET` | `/portfolio/import-jobs/latest` | Latest import job status |
 | `POST` | `/portfolio/import/file` | Manual file upload import (202) |
 | `GET` | `/portfolio/monte-carlo` | Run Monte Carlo simulation |

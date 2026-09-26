@@ -30,6 +30,17 @@ type PositionResponse struct {
 	QuoteFetchedAt string   `json:"quote_fetched_at,omitempty"`
 }
 
+type PortfolioHistoryPoint struct {
+	Date           string             `json:"date"`
+	MarketValueBRL float64            `json:"market_value_brl"`
+	CostBasisBRL   float64            `json:"cost_basis_brl"`
+	ByAssetType    map[string]float64 `json:"by_asset_type"`
+}
+
+type PortfolioHistoryResponse struct {
+	Points []PortfolioHistoryPoint `json:"points"`
+}
+
 type AllocationItem struct {
 	Ticker      string  `json:"ticker"`
 	CompanyName string  `json:"company_name,omitempty"`
