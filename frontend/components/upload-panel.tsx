@@ -6,11 +6,10 @@ import type { ImportJobResponse } from "@/lib/api";
 
 const API_BASE = (process.env.NEXT_PUBLIC_BASE_PATH ?? "") + (process.env.NEXT_PUBLIC_API_BASE_URL ?? "/api");
 
-type ImportMethod = "upload" | "b3" | "ibkr";
+type ImportMethod = "upload" | "ibkr";
 
 const TABS: { id: ImportMethod; label: string; shortLabel: string }[] = [
   { id: "upload", label: "Upload file", shortLabel: "Upload" },
-  { id: "b3", label: "B3 sync", shortLabel: "B3" },
   { id: "ibkr", label: "IBKR sync", shortLabel: "IBKR" },
 ];
 
@@ -78,7 +77,6 @@ export function UploadPanel({
   const router = useRouter();
   const [activeMethod, setActiveMethod] = useState<ImportMethod>("upload");
   const [message, setMessage] = useState<string | null>(null);
-  const [syncResult, setSyncResult] = useState<string | null>(null);
   const [isSyncing, startSyncTransition] = useTransition();
   const [ibkrResult, setIbkrResult] = useState<string | null>(null);
   const [isIbkrSyncing, startIbkrSyncTransition] = useTransition();
@@ -112,42 +110,6 @@ export function UploadPanel({
         );
       } finally {
         event.target.value = "";
-      }
-    });
-  };
-
-  const onSyncB3 = () => {
-    startSyncTransition(async () => {
-      setSyncResult(null);
-      try {
-        const response = await fetch(`${API_BASE}/portfolio/import-b3`, { method: "POST" });
-        if (!response.ok) {
-          const payload = await response.json().catch(() => ({}));
-          setSyncResult(payload.detail ?? "Sync failed.");
-          return;
-        }
-        setSyncResult("Syncing… this may take a minute.");
-        for (let i = 0; i < 60; i++) {
-          await new Promise((r) => setTimeout(r, 5000));
-          const jobRes = await fetch(`${API_BASE}/portfolio/import-jobs/latest`).catch(() => null);
-          if (!jobRes?.ok) continue;
-          const job = await jobRes.json().catch(() => null);
-          if (!job) continue;
-          if (job.status === "completed") {
-            setSyncResult(job.detail ?? "Sync complete.");
-            router.refresh();
-            return;
-          }
-          if (job.status === "failed" || job.status === "requires_login") {
-            setSyncResult(job.detail ?? "Sync failed.");
-            return;
-          }
-        }
-        setSyncResult("Sync is taking longer than expected — check back shortly.");
-      } catch (error) {
-        setSyncResult(
-          error instanceof Error ? error.message : `Sync failed. Check that the API is running at ${API_BASE}.`,
-        );
       }
     });
   };
@@ -235,20 +197,6 @@ export function UploadPanel({
           </div>
         )}
 
-        {activeMethod === "b3" && (
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <p className="text-sm text-white/65">Sync positions directly from the B3 investor portal.</p>
-            <button
-              type="button"
-              onClick={onSyncB3}
-              disabled={isSyncing}
-              className="inline-flex cursor-pointer items-center justify-center rounded-full border border-white bg-white px-5 py-3 text-sm font-semibold text-[#1a1d25] transition hover:bg-transparent hover:text-white disabled:opacity-50"
-            >
-              {isSyncing ? "Syncing..." : "Sync from B3"}
-            </button>
-          </div>
-        )}
-
         {activeMethod === "ibkr" && (
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
             <p className="text-sm text-white/65">Pull the latest positions from your IBKR Flex query.</p>
@@ -264,7 +212,6 @@ export function UploadPanel({
         )}
 
         {activeMethod === "upload" && message ? <p className="mt-3 text-sm text-white/65">{message}</p> : null}
-        {activeMethod === "b3" && syncResult ? <p className="mt-3 text-sm text-white/65">{syncResult}</p> : null}
         {activeMethod === "ibkr" && ibkrResult ? <p className="mt-3 text-sm text-white/65">{ibkrResult}</p> : null}
       </div>
     </section>

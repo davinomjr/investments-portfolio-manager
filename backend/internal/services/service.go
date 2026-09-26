@@ -82,29 +82,6 @@ func normalizeRate(value float64) float64 {
 	return value
 }
 
-func (s *Service) ImportB3(ctx context.Context) (models.ImportJobResponse, error) {
-	jobID, job, err := s.createJob(ctx, "b3", "running", "Import started")
-	if err != nil {
-		return models.ImportJobResponse{}, err
-	}
-	// Run the worker in the background so the HTTP request returns immediately.
-	// The caller polls GET /portfolio/import-jobs/latest for the final status.
-	go func() {
-		bgCtx := context.Background()
-		holdings, err := s.runWorker(bgCtx, []string{"import", "--json"})
-		if err != nil {
-			s.updateJob(bgCtx, jobID, "requires_login", err.Error())
-			return
-		}
-		if err := s.upsertHoldings(bgCtx, holdings, "b3"); err != nil {
-			s.updateJob(bgCtx, jobID, "failed", err.Error())
-			return
-		}
-		s.updateJob(bgCtx, jobID, "completed", fmt.Sprintf("Imported %d positions from B3", len(holdings)))
-	}()
-	return job, nil
-}
-
 func (s *Service) ImportIBKR(ctx context.Context) (models.ImportJobResponse, error) {
 	if s.Config.IBKRFlexToken == "" || s.Config.IBKRFlexQueryID == "" {
 		return models.ImportJobResponse{}, fmt.Errorf("IBKR_FLEX_TOKEN and IBKR_FLEX_QUERY_ID must be configured")

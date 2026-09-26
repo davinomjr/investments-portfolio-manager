@@ -180,7 +180,6 @@ Reference DDL for the original PostgreSQL design is in `database/init.sql` (not 
 | `GET` | `/portfolio` | Aggregated portfolio summary |
 | `GET` | `/positions` | All current positions |
 | `GET` | `/portfolio/import-jobs/latest` | Latest import job status |
-| `POST` | `/portfolio/import/b3` | Trigger async B3 import (202) |
 | `POST` | `/portfolio/import/file` | Manual file upload import (202) |
 | `GET` | `/portfolio/monte-carlo` | Run Monte Carlo simulation |
 | `GET` | `/portfolio/sentiment` | Sentiment analysis snapshot |

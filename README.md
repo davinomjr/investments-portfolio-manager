@@ -13,7 +13,6 @@ Current structure:
 
 Implemented now:
 
-- B3 import job endpoint: `POST /portfolio/import-b3`
 - manual file import endpoint: `POST /portfolio/import-file`
 - Portfolio read endpoints: `GET /portfolio`, `GET /positions`
 - latest quarterly stock results endpoint: `GET /stocks/latest-results`

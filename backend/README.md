@@ -23,14 +23,13 @@ The intent is:
 
 - same endpoints as the historical Python backend
 - same database file as the historical Python backend
-- same Python worker for `import-b3` and `import-file`
+- same Python worker for `import-file`
 - default port `8000`, so the frontend can treat it as the primary API
 
 ## Endpoints
 
 - `GET /portfolio`
 - `GET /positions`
-- `POST /portfolio/import-b3`
 - `POST /portfolio/import-file`
 - `GET /stocks/latest-results`
 

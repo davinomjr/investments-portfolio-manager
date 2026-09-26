@@ -45,7 +45,6 @@ func New(svc *services.Service, cfg config.Config) http.Handler {
 	authed.HandleFunc("GET /fiis/latest-results", server.handleLatestFIIResults)
 	authed.HandleFunc("GET /portfolio/monte-carlo", server.handleMonteCarlo)
 	authed.HandleFunc("GET /portfolio/import-jobs/latest", server.handleGetLatestImportJob)
-	authed.HandleFunc("POST /portfolio/import-b3", server.handleImportB3)
 	authed.HandleFunc("POST /portfolio/import-file", server.handleImportFile)
 	authed.HandleFunc("POST /portfolio/import-ibkr", server.handleImportIBKR)
 
@@ -218,11 +217,6 @@ func (s *Server) handleGetLatestImportJob(w http.ResponseWriter, r *http.Request
 		return
 	}
 	writeJSON(w, resp, nil, http.StatusOK)
-}
-
-func (s *Server) handleImportB3(w http.ResponseWriter, r *http.Request) {
-	resp, err := s.Service.ImportB3(r.Context())
-	writeJSON(w, resp, err, http.StatusAccepted)
 }
 
 func (s *Server) handleImportFile(w http.ResponseWriter, r *http.Request) {
