@@ -14,6 +14,9 @@ function RefreshIcon({ className = "" }: { className?: string }) {
   );
 }
 
+// Personal site the portfolio lives under (davinomjr.com/investments).
+const HOME_SITE_URL = "https://davinomjr.com";
+
 const ITEMS = [
   { href: "/", label: "Portfolio", Icon: Home },
   { href: "/results", label: "Stocks", Icon: ChartNoAxesCombined },
@@ -60,7 +63,19 @@ export function TopNav() {
 
   return (
     <header className="fixed w-full top-0 z-20 pointer-events-none md:sticky md:border-b md:border-white/15 md:bg-[#1a1d25]/90 md:backdrop-blur md:pointer-events-auto">
-      <div className="mx-auto flex max-w-7xl items-center justify-end gap-3 px-4 py-3 md:px-10 md:py-4">
+      <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-3 md:px-10 md:py-4">
+        {/* Shortcut back to the personal site — mirrors its "D" favicon */}
+        <a
+          href={HOME_SITE_URL}
+          title="davinomjr.com"
+          aria-label="Go to davinomjr.com"
+          className="pointer-events-auto shrink-0 rounded-lg transition hover:opacity-80"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" className="h-8 w-8 md:h-9 md:w-9">
+            <rect width="32" height="32" rx="7" fill="#282a36" />
+            <path d="M9.5 8v16h4.5a8 8 0 0 0 0-16z" fill="none" stroke="#bd93f9" strokeWidth="3.5" strokeLinejoin="round" />
+          </svg>
+        </a>
         <div className="flex shrink-0 items-center gap-2 md:gap-4 pointer-events-auto md:pointer-events-auto">
           {/* Nav pills — hidden on mobile, bottom nav used instead */}
           <nav className="hidden md:flex items-center gap-1 rounded-full border border-white/15 p-1">
