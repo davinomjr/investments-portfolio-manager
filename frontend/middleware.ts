@@ -69,6 +69,6 @@ export const config = {
     // requires at least one segment after "/", so without this entry the
     // dashboard root falls through unauthenticated.
     "/",
-    "/((?!login|_next/static|_next/image|favicon.ico|manifest.webmanifest|icon.svg).*)",
+    "/((?!login|health|_next/static|_next/image|favicon.ico|manifest.webmanifest|icon.svg).*)",
   ],
 };
