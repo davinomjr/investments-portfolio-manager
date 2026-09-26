@@ -37,6 +37,17 @@ export type Portfolio = {
   allocations: Allocation[];
 };
 
+export type PortfolioHistoryPoint = {
+  date: string;
+  market_value_brl: number;
+  cost_basis_brl: number;
+  by_asset_type: Record<string, number>;
+};
+
+export type PortfolioHistory = {
+  points: PortfolioHistoryPoint[];
+};
+
 export type QuarterlyResultItem = {
   ticker: string;
   company_name: string | null;
@@ -150,6 +161,16 @@ export async function fetchPortfolio(): Promise<Portfolio> {
   const response = await serverFetch("/portfolio");
   if (!response.ok) {
     throw new Error("Failed to load portfolio.");
+  }
+  return response.json();
+}
+
+// History is supplementary: a failure (e.g. backend not yet deployed with the
+// endpoint) renders an empty chart instead of failing the whole dashboard.
+export async function fetchPortfolioHistory(): Promise<PortfolioHistory> {
+  const response = await serverFetch("/portfolio/history");
+  if (!response.ok) {
+    return { points: [] };
   }
   return response.json();
 }

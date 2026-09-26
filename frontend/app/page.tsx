@@ -1,15 +1,18 @@
 export const dynamic = "force-dynamic";
 
 import { AllocationChart } from "@/components/allocation-chart";
+import { HistoryChart } from "@/components/history-chart";
 import { PositionsTable } from "@/components/positions-table";
 import { SummaryCards } from "@/components/summary-cards";
 import { UploadPanel } from "@/components/upload-panel";
 import {
   fetchLatestImportJob,
   fetchPortfolio,
+  fetchPortfolioHistory,
   fetchPositions,
   type ImportJobResponse,
   type Portfolio,
+  type PortfolioHistory,
   type Position,
 } from "@/lib/api";
 
@@ -26,14 +29,16 @@ const EMPTY_PORTFOLIO: Portfolio = {
 export default async function HomePage() {
   let portfolio: Portfolio = EMPTY_PORTFOLIO;
   let positions: Position[] = [];
+  let history: PortfolioHistory = { points: [] };
   let latestB3Job: ImportJobResponse | null = null;
   let latestIbkrJob: ImportJobResponse | null = null;
   let loadError: string | null = null;
 
   try {
-    [portfolio, positions, latestB3Job, latestIbkrJob] = await Promise.all([
+    [portfolio, positions, history, latestB3Job, latestIbkrJob] = await Promise.all([
       fetchPortfolio(),
       fetchPositions(),
+      fetchPortfolioHistory(),
       fetchLatestImportJob(["b3", "manual_b3_export"]),
       fetchLatestImportJob(["ibkr"]),
     ]);
@@ -55,6 +60,7 @@ export default async function HomePage() {
         </section>
       ) : null}
       <SummaryCards portfolio={portfolio} />
+      <HistoryChart points={history.points} />
 
       <section className="grid gap-8 lg:grid-cols-3 lg:items-start">
         <AllocationChart allocations={portfolio.allocations} />
