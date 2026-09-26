@@ -18,7 +18,11 @@ export const metadata: Metadata = {
   // Set an explicit icon so the browser doesn't fall back to /favicon.ico
   // at the page origin's root — on davinomjr.com that resolves to an
   // unrelated HTTP URL and triggers a mixed-content block.
-  icons: { icon: `${basePath}/icon.svg` },
+  icons: {
+    icon: `${basePath}/icon.svg`,
+    // iOS ignores SVG for home-screen icons; it needs a 180x180 PNG.
+    apple: { url: `${basePath}/apple-touch-icon.png`, sizes: "180x180" },
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
