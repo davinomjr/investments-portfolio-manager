@@ -84,7 +84,8 @@ export function FIIResults({ results }: { results: FIIResultsResponse }) {
                   </div>
 
                   {/* Valuation + health row */}
-                  <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    <Metric label="Price" value={item.price !== null ? `R$ ${item.price.toFixed(2)}` : null} />
                     <ColorMetric label="P/VP" value={item.pvp !== null ? item.pvp.toFixed(2) : null} s={pvpStyle} />
                     <ColorMetric label="Avg. Vacancy" value={item.vacancy_rate !== null ? `${item.vacancy_rate.toFixed(1)}%` : null} s={vacancyStyle} />
                     <Metric label="Avg. Vol. (2m)" value={formatVolume(item.avg_daily_volume)} />
