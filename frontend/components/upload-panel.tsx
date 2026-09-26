@@ -9,7 +9,7 @@ const API_BASE = (process.env.NEXT_PUBLIC_BASE_PATH ?? "") + (process.env.NEXT_P
 type ImportMethod = "upload" | "ibkr";
 
 const TABS: { id: ImportMethod; label: string; shortLabel: string }[] = [
-  { id: "upload", label: "Upload file", shortLabel: "Upload" },
+  { id: "upload", label: "B3 sync", shortLabel: "B3" },
   { id: "ibkr", label: "IBKR sync", shortLabel: "IBKR" },
 ];
 
@@ -153,7 +153,7 @@ export function UploadPanel({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-xs uppercase tracking-[0.3em] text-white/55">Import</p>
-          <h2 className="mt-2 text-xl font-semibold md:text-2xl">Import positions</h2>
+          <h2 className="mt-2 text-xl font-semibold md:text-2xl">Sync positions</h2>
         </div>
         <div className="flex flex-col items-start gap-2 sm:items-end">
           <ImportStatusBadge label="B3" job={latestB3Job ?? null} />
