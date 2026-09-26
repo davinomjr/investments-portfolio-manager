@@ -47,6 +47,8 @@ type Service struct {
 	tdSnapshot   map[string]tdProduct
 	tdSnapshotAt time.Time
 	tdRefreshing bool
+
+	snapshotMu sync.Mutex
 }
 
 func New(db *sql.DB, cfg config.Config) *Service {
@@ -105,6 +107,7 @@ func (s *Service) ImportIBKR(ctx context.Context) (models.ImportJobResponse, err
 			return
 		}
 		s.updateJob(bgCtx, jobID, "completed", fmt.Sprintf("Imported %d positions from IBKR", len(holdings)))
+		s.snapshotAfterImport()
 	}()
 	return job, nil
 }
@@ -136,6 +139,7 @@ func (s *Service) ImportFile(ctx context.Context, file multipart.File, filename 
 		updated, _ := s.updateJob(ctx, jobID, "failed", err.Error())
 		return updated, nil
 	}
+	s.snapshotAfterImport()
 	return s.updateJob(ctx, jobID, "completed", fmt.Sprintf("Imported %d positions from %s", len(holdings), filename))
 }
 
@@ -154,6 +158,7 @@ func (s *Service) ImportPush(ctx context.Context, holdings []models.HoldingPaylo
 		updated, _ := s.updateJob(ctx, jobID, "failed", err.Error())
 		return updated, nil
 	}
+	s.snapshotAfterImport()
 	return s.updateJob(ctx, jobID, "completed", fmt.Sprintf("Pushed %d positions from %s", len(holdings), source))
 }
 
