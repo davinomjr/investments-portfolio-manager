@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/csv"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -187,8 +188,10 @@ func (s *Service) WarmTesouroDireto() {
 const tesouroDiretoCSVURL = "https://www.tesourotransparente.gov.br/ckan/dataset/df56aa42-484a-4a59-8184-7676580c81e3/resource/796d2059-14e9-44e3-80c9-2d9e30b405c1/download/PrecoTaxaTesouroDireto.csv"
 
 func (s *Service) fetchTesouroDiretoIndex(ctx context.Context) (map[string]tdProduct, error) {
-	// The CSV is large; use a generous timeout independent of QUOTES_HTTP_TIMEOUT.
-	reqCtx, cancel := context.WithTimeout(ctx, 45*time.Second)
+	// The CSV is large (downloads routinely take ~45s from Railway); use a
+	// generous timeout independent of QUOTES_HTTP_TIMEOUT, bounded by the
+	// caller's 90s refresh deadline.
+	reqCtx, cancel := context.WithTimeout(ctx, 85*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, tesouroDiretoCSVURL, nil)
 	if err != nil {
@@ -229,7 +232,14 @@ func parseTesouroDiretoCSV(body io.Reader) (map[string]tdProduct, error) {
 			break
 		}
 		if err != nil {
-			continue
+			// Skip malformed rows, but bail on I/O errors: a body read that
+			// fails (e.g. timeout mid-download) returns the same error on
+			// every call, so continuing would spin a CPU core forever.
+			var parseErr *csv.ParseError
+			if errors.As(err, &parseErr) {
+				continue
+			}
+			return nil, fmt.Errorf("td: reading csv: %w", err)
 		}
 		if !headerSeen {
 			headerSeen = true
