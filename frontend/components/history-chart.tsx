@@ -205,7 +205,7 @@ export function HistoryChart({ points }: { points: PortfolioHistoryPoint[] }) {
                   tick={{ fill: "rgba(255,255,255,0.55)", fontSize: 11 }}
                   axisLine={false}
                   tickLine={false}
-                  width={48}
+                  width={64}
                   domain={view === "total" ? ["auto", "auto"] : [0, "auto"]}
                 />
                 <Tooltip
