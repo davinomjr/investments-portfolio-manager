@@ -62,7 +62,7 @@ export function TopNav() {
   }
 
   return (
-    <header className="fixed w-full top-0 z-20 pointer-events-none md:sticky md:border-b md:border-white/15 md:bg-[#1a1d25]/90 md:backdrop-blur md:pointer-events-auto">
+    <header className="fixed w-full top-0 z-20 border-b border-white/10 bg-[#1a1d25]/70 backdrop-blur-md md:sticky md:border-white/15 md:bg-[#1a1d25]/90 md:backdrop-blur">
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-3 md:px-10 md:py-4">
         {/* Shortcut back to the personal site — mirrors its "D" favicon */}
         <a
