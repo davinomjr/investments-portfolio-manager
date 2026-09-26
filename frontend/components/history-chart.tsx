@@ -128,6 +128,10 @@ export function HistoryChart({ points }: { points: PortfolioHistoryPoint[] }) {
   const gain = last ? last.market_value_brl - last.cost_basis_brl : 0;
   const gainColor = gain >= 0 ? "text-emerald-300" : "text-rose-300";
   const changeColor = change >= 0 ? "text-emerald-300" : "text-rose-300";
+  // With a single snapshot there is no line to draw, so show the day's numbers
+  // and a dot until the next sync adds a second point.
+  const single = filtered.length === 1;
+  const singleDot = (color: string) => (single ? { r: 4, fill: color, stroke: color } : false);
   const signed = (v: number) => `${v >= 0 ? "+" : "−"}${brlFormatter.format(Math.abs(v))}`;
 
   return (
@@ -136,7 +140,21 @@ export function HistoryChart({ points }: { points: PortfolioHistoryPoint[] }) {
         <div>
           <p className="text-xs uppercase tracking-[0.3em] text-white/55">History</p>
           <h2 className="mt-2 text-2xl font-semibold">Portfolio growth</h2>
-          {last && filtered.length > 1 ? (
+          {single ? (
+            <p className="mt-2 text-xs text-white/55">
+              {visible ? (
+                <>
+                  Market value <span className="font-semibold text-white">{brlFormatter.format(last.market_value_brl)}</span>
+                  {" · "}
+                  Invested <span className="font-semibold text-white">{brlFormatter.format(last.cost_basis_brl)}</span>
+                  {" · "}
+                  Gain <span className={`font-semibold ${gainColor}`}>{signed(gain)}</span>
+                </>
+              ) : (
+                "**"
+              )}
+            </p>
+          ) : last ? (
             <p className="mt-2 text-xs text-white/55">
               {visible ? (
                 <>
@@ -156,13 +174,11 @@ export function HistoryChart({ points }: { points: PortfolioHistoryPoint[] }) {
         </div>
       </div>
 
-      {filtered.length < 2 ? (
+      {filtered.length === 0 ? (
         <div className="flex h-56 items-center justify-center rounded-2xl border border-dashed border-white/10 px-6 text-center text-sm text-white/55 sm:h-64">
           {points.length === 0
             ? "No history yet. A snapshot is saved after every sync. The chart fills in from your next one."
-            : points.length === 1
-            ? `First snapshot saved on ${formatDate(points[0].date, true)}. The line appears after the next daily sync.`
-            : "Not enough snapshots in this range. Try a longer one."}
+            : "No snapshots in this range. Try a longer one."}
         </div>
       ) : (
         <>
@@ -212,7 +228,7 @@ export function HistoryChart({ points }: { points: PortfolioHistoryPoint[] }) {
                         stroke={MARKET_COLOR}
                         strokeWidth={2}
                         fill="url(#history-market-fill)"
-                        dot={false}
+                        dot={singleDot(MARKET_COLOR)}
                         activeDot={{ r: 4 }}
                       />,
                       <Line
@@ -222,7 +238,7 @@ export function HistoryChart({ points }: { points: PortfolioHistoryPoint[] }) {
                         stroke={INVESTED_COLOR}
                         strokeWidth={1.5}
                         strokeDasharray="5 4"
-                        dot={false}
+                        dot={singleDot(INVESTED_COLOR)}
                         activeDot={{ r: 3 }}
                       />,
                     ]
@@ -236,13 +252,18 @@ export function HistoryChart({ points }: { points: PortfolioHistoryPoint[] }) {
                         fill={getAssetStyle(type).color}
                         fillOpacity={0.35}
                         strokeWidth={1.5}
-                        dot={false}
+                        dot={singleDot(getAssetStyle(type).color)}
                       />
                     ))}
               </ComposedChart>
             </ResponsiveContainer>
           </div>
           <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-white/65">
+            {single ? (
+              <span className="w-full text-white/45 sm:order-last sm:ml-auto sm:w-auto">
+                First snapshot on {formatDate(last.date, true)}. The line starts after the next daily sync.
+              </span>
+            ) : null}
             {view === "total" ? (
               <>
                 <LegendItem color={MARKET_COLOR} label="Market value" />
