@@ -227,6 +227,16 @@ The only GitHub Actions workflow (`.github/workflows/summary.yml`) auto-summariz
 - Commit messages are imperative and lowercase (e.g. `add monte carlo endpoint`, `fix: sentiment ttl check`).
 - Keep commits focused; one logical change per commit.
 
+### Pull request descriptions
+
+Every PR gets a written description of what was built — never leave the GitHub default (a bare commit list). When pushing a branch for a PR, create or update it with `gh pr create` / `gh pr edit --body-file` using this structure:
+
+- **Summary** — what the PR delivers and why (the problem it solves), in 2–3 sentences.
+- **What changed** — grouped by area (backend / frontend / infra), naming new tables, endpoints, components, and behaviours; reference commit SHAs.
+- **Testing** — what was actually run (unit tests, local end-to-end, builds) and what was *not* verified.
+- **After deploy** — concrete steps to confirm it works in production, when relevant.
+- **Notes** — limitations, trade-offs, or follow-ups.
+
 ---
 
 ## Production Deployment (Railway)
