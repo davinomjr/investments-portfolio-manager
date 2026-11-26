@@ -180,6 +180,9 @@ func TestGetPortfolioSinglePosition(t *testing.T) {
 	if resp.Allocations[0].Weight != 1.0 {
 		t.Errorf("Weight: got %f, want 1.0", resp.Allocations[0].Weight)
 	}
+	if resp.Allocations[0].Source != "b3" {
+		t.Errorf("Source: got %q, want b3", resp.Allocations[0].Source)
+	}
 }
 
 func TestGetPortfolioWeightsAndOrdering(t *testing.T) {

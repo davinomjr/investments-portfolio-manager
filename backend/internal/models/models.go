@@ -46,6 +46,7 @@ type AllocationItem struct {
 	Ticker      string  `json:"ticker"`
 	CompanyName string  `json:"company_name,omitempty"`
 	AssetType   string  `json:"asset_type"`
+	Source      string  `json:"source"`
 	MarketValue float64 `json:"market_value"`
 	Weight      float64 `json:"weight"`
 }
