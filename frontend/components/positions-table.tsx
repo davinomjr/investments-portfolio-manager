@@ -194,7 +194,7 @@ export function PositionsTable({ positions }: { positions: Position[] }) {
             <thead className="text-white/50">
               <tr>
                 <SortHeader label="Ticker" sortKey="ticker" activeKey={sortKey} activeDir={sortDir} onSort={handleSort} className="pb-2 pr-4" />
-                <SortHeader label="Type" sortKey="type" activeKey={sortKey} activeDir={sortDir} onSort={handleSort} className="hidden pb-2 pr-4 sm:table-cell" />
+                <SortHeader label="Type" sortKey="type" activeKey={sortKey} activeDir={sortDir} onSort={handleSort} className="hidden pb-2 pr-4 lg:table-cell" />
                 <SortHeader label="Qty" sortKey="qty" activeKey={sortKey} activeDir={sortDir} onSort={handleSort} className="pb-2 pr-4" />
                 <SortHeader label="Last / Avg" sortKey="price" activeKey={sortKey} activeDir={sortDir} onSort={handleSort} className="hidden pb-2 pr-4 sm:table-cell" />
                 <SortHeader label="Value" sortKey="value" activeKey={sortKey} activeDir={sortDir} onSort={handleSort} className="pb-2 pr-4" />
@@ -222,9 +222,9 @@ export function PositionsTable({ positions }: { positions: Position[] }) {
                         <span className="ml-2 text-[10px] uppercase tracking-[0.2em] text-amber-300/80">stale</span>
                       ) : null}
                     </td>
-                    <td className="hidden px-3 py-2.5 sm:table-cell md:px-4 md:py-3">
+                    <td className="hidden px-3 py-2.5 lg:table-cell md:px-4 md:py-3">
                       <span
-                        className="inline-flex rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em]"
+                        className="inline-flex whitespace-nowrap rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em]"
                         style={{
                           backgroundColor: style.soft,
                           borderColor: style.border,
@@ -234,8 +234,8 @@ export function PositionsTable({ positions }: { positions: Position[] }) {
                         {style.label}
                       </span>
                     </td>
-                    <td className="px-3 py-2.5 md:px-4 md:py-3">{visible ? position.quantity : "**"}</td>
-                    <td className="hidden px-3 py-2.5 sm:table-cell md:px-4 md:py-3">
+                    <td className="whitespace-nowrap px-3 py-2.5 tabular-nums md:px-4 md:py-3">{visible ? position.quantity : "**"}</td>
+                    <td className="hidden whitespace-nowrap px-3 py-2.5 tabular-nums sm:table-cell md:px-4 md:py-3">
                       {visible ? (
                         <div className="flex flex-col leading-tight">
                           <span>{hasLast ? formatCurrency(position.last_price as number, position.currency) : "—"}</span>
@@ -250,8 +250,8 @@ export function PositionsTable({ positions }: { positions: Position[] }) {
                         "**"
                       )}
                     </td>
-                    <td className="rounded-r-2xl px-3 py-2.5 md:rounded-none md:px-4 md:py-3">{visible ? formatCurrency(position.market_value_brl, "BRL") : "**"}</td>
-                    <td className="hidden rounded-r-2xl px-3 py-2.5 md:table-cell md:px-4 md:py-3">
+                    <td className="whitespace-nowrap rounded-r-2xl px-3 py-2.5 tabular-nums md:rounded-none md:px-4 md:py-3">{visible ? formatCurrency(position.market_value_brl, "BRL") : "**"}</td>
+                    <td className="hidden whitespace-nowrap rounded-r-2xl px-3 py-2.5 tabular-nums md:table-cell md:px-4 md:py-3">
                       {visible ? (
                         position.pnl_pct !== null ? (
                           <div className={`flex flex-col leading-tight font-semibold ${pnlColor}`}>
