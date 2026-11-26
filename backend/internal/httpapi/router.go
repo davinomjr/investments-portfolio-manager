@@ -35,6 +35,7 @@ func New(svc *services.Service, cfg config.Config) http.Handler {
 	// but we trigger it alongside the B3 push so both sources sync in one hit.
 	mux.Handle("POST /portfolio/import-push", server.withPushToken(http.HandlerFunc(server.handleImportPush)))
 	mux.Handle("POST /portfolio/import-ibkr-trigger", server.withPushToken(http.HandlerFunc(server.handleImportIBKR)))
+	mux.Handle("POST /portfolio/import-pluggy-trigger", server.withPushToken(http.HandlerFunc(server.handleImportPluggy)))
 
 	// Authenticated routes
 	authed := http.NewServeMux()
@@ -42,6 +43,7 @@ func New(svc *services.Service, cfg config.Config) http.Handler {
 	authed.HandleFunc("GET /portfolio/history", server.handlePortfolioHistory)
 	authed.HandleFunc("GET /positions", server.handlePositions)
 	authed.HandleFunc("PATCH /positions/visibility", server.handleSetPositionsVisibility)
+	authed.HandleFunc("PATCH /positions/{ticker}/avg-price", server.handleSetAvgPrice)
 	authed.HandleFunc("GET /stocks/latest-results", server.handleLatestResults)
 	authed.HandleFunc("GET /stocks/{ticker}/sentiment", server.handleTickerSentiment)
 	authed.HandleFunc("GET /fiis/latest-results", server.handleLatestFIIResults)
@@ -49,6 +51,8 @@ func New(svc *services.Service, cfg config.Config) http.Handler {
 	authed.HandleFunc("GET /portfolio/import-jobs/latest", server.handleGetLatestImportJob)
 	authed.HandleFunc("POST /portfolio/import-file", server.handleImportFile)
 	authed.HandleFunc("POST /portfolio/import-ibkr", server.handleImportIBKR)
+	authed.HandleFunc("POST /portfolio/import-pluggy", server.handleImportPluggy)
+	authed.HandleFunc("GET /portfolio/pluggy/preview", server.handlePluggyPreview)
 
 	// Mount authed routes under main mux with auth middleware
 	mux.Handle("/", server.withAuth(authed))
@@ -279,6 +283,47 @@ func (s *Server) handleImportIBKR(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, resp, nil, http.StatusAccepted)
+}
+
+// handleSetAvgPrice stores a user-entered average price; {"avg_price": null}
+// clears it so the next sync restores the source's value.
+func (s *Server) handleSetAvgPrice(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		AvgPrice *float64 `json:"avg_price"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeErr(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	err := s.Service.SetManualAvgPrice(r.Context(), r.PathValue("ticker"), body.AvgPrice)
+	switch {
+	case errors.Is(err, services.ErrPositionNotFound):
+		writeErr(w, err.Error(), http.StatusNotFound)
+	case err != nil:
+		writeErr(w, err.Error(), http.StatusBadRequest)
+	default:
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+func (s *Server) handleImportPluggy(w http.ResponseWriter, r *http.Request) {
+	resp, err := s.Service.ImportPluggy(r.Context())
+	if err != nil {
+		writeErr(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	writeJSON(w, resp, nil, http.StatusAccepted)
+}
+
+// handlePluggyPreview returns mapped (and optionally raw) Pluggy positions
+// without writing anything, for comparing against the B3 sync.
+func (s *Server) handlePluggyPreview(w http.ResponseWriter, r *http.Request) {
+	preview, err := s.Service.PreviewPluggy(r.Context(), r.URL.Query().Get("raw") == "1")
+	if err != nil {
+		writeErr(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	writeJSON(w, preview, nil, http.StatusOK)
 }
 
 func withCORS(next http.Handler, allowedOrigins []string) http.Handler {
