@@ -388,6 +388,7 @@ func (s *Service) GetPortfolio(ctx context.Context) (models.PortfolioResponse, e
 			Ticker:      p.Ticker,
 			CompanyName: p.CompanyName,
 			AssetType:   p.AssetType,
+			Source:      p.Source,
 			MarketValue: p.MarketValueBRL,
 		})
 	}
