@@ -171,7 +171,7 @@ func (s *Service) GetPositions(ctx context.Context) ([]models.PositionResponse, 
 // Returns positions ordered by most-recently-updated first.
 func (s *Service) loadEnrichedPositions(ctx context.Context) ([]models.PositionResponse, error) {
 	rows, err := s.DB.QueryContext(ctx, `
-		SELECT a.id, a.ticker, COALESCE(am.company_name,''), a.asset_type, p.quantity, p.avg_price, a.currency, COALESCE(p.broker,''), p.source, p.last_updated, p.hidden
+		SELECT a.id, a.ticker, COALESCE(am.company_name,''), a.asset_type, p.quantity, p.avg_price, p.avg_price_manual IS NOT NULL, a.currency, COALESCE(p.broker,''), p.source, p.last_updated, p.hidden
 		FROM positions p
 		JOIN assets a ON a.id = p.asset_id
 		LEFT JOIN asset_metadata am ON am.asset_id = a.id
@@ -189,7 +189,7 @@ func (s *Service) loadEnrichedPositions(ctx context.Context) ([]models.PositionR
 	requests := make([]quoteRequest, 0)
 	for rows.Next() {
 		var rd rowData
-		if err := rows.Scan(&rd.assetID, &rd.pos.Ticker, &rd.pos.CompanyName, &rd.pos.AssetType, &rd.pos.Quantity, &rd.pos.AvgPrice, &rd.pos.Currency, &rd.pos.Broker, &rd.pos.Source, &rd.pos.LastUpdated, &rd.pos.Hidden); err != nil {
+		if err := rows.Scan(&rd.assetID, &rd.pos.Ticker, &rd.pos.CompanyName, &rd.pos.AssetType, &rd.pos.Quantity, &rd.pos.AvgPrice, &rd.pos.AvgPriceManual, &rd.pos.Currency, &rd.pos.Broker, &rd.pos.Source, &rd.pos.LastUpdated, &rd.pos.Hidden); err != nil {
 			return nil, err
 		}
 		rowsData = append(rowsData, rd)
@@ -785,7 +785,7 @@ func (s *Service) upsertHoldings(ctx context.Context, holdings []models.HoldingP
 				return err
 			}
 		} else if err == nil {
-			if _, err := tx.ExecContext(ctx, `UPDATE positions SET quantity=?, avg_price=?, broker=?, source=?, last_updated=? WHERE id=?`, holding.Quantity, holding.AveragePrice, nullIfEmpty(holding.Broker), source, now, posID); err != nil {
+			if _, err := tx.ExecContext(ctx, `UPDATE positions SET quantity=?, avg_price=COALESCE(avg_price_manual, ?), broker=COALESCE(?, broker), source=?, last_updated=? WHERE id=?`, holding.Quantity, holding.AveragePrice, nullIfEmpty(holding.Broker), source, now, posID); err != nil {
 				return err
 			}
 		} else {
@@ -838,6 +838,43 @@ const maxStalePositionRatio = 0.3
 // above will act on, so selling 1 of 2 holdings (a small, legitimate 50%
 // drop) is never blocked.
 const minStaleCountForGuard = 3
+
+// SetManualAvgPrice stores a user-entered average price for a ticker. Syncs
+// keep it instead of overwriting with the source's value. A nil price clears
+// the override (the next sync restores the source's value).
+func (s *Service) SetManualAvgPrice(ctx context.Context, ticker string, price *float64) error {
+	ticker = strings.ToUpper(strings.TrimSpace(ticker))
+	if price != nil && *price <= 0 {
+		return fmt.Errorf("avg_price must be positive")
+	}
+	var res sql.Result
+	var err error
+	if price == nil {
+		res, err = s.DB.ExecContext(ctx, `UPDATE positions SET avg_price_manual=NULL WHERE user_id=? AND asset_id=(SELECT id FROM assets WHERE ticker=?)`, s.Config.DefaultUserID, ticker)
+	} else {
+		res, err = s.DB.ExecContext(ctx, `UPDATE positions SET avg_price_manual=?, avg_price=? WHERE user_id=? AND asset_id=(SELECT id FROM assets WHERE ticker=?)`, *price, *price, s.Config.DefaultUserID, ticker)
+	}
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrPositionNotFound
+	}
+	return nil
+}
+
+// ErrPositionNotFound is returned when a ticker has no stored position.
+var ErrPositionNotFound = errors.New("position not found")
+
+// removePositionsBySource deletes every position from one import source,
+// returning how many rows went away. Used when Pluggy takes over from B3.
+func (s *Service) removePositionsBySource(ctx context.Context, source string) (int64, error) {
+	res, err := s.DB.ExecContext(ctx, `DELETE FROM positions WHERE user_id=? AND source=?`, s.Config.DefaultUserID, source)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
 
 func defaultString(value, fallback string) string {
 	if strings.TrimSpace(value) == "" {

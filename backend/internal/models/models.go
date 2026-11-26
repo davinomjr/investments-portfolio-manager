@@ -15,6 +15,7 @@ type PositionResponse struct {
 	AssetType      string   `json:"asset_type"`
 	Quantity       float64  `json:"quantity"`
 	AvgPrice       float64  `json:"avg_price"`
+	AvgPriceManual bool     `json:"avg_price_manual"`
 	Currency       string   `json:"currency"`
 	Broker         string   `json:"broker,omitempty"`
 	Source         string   `json:"source"`

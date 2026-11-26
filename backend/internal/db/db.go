@@ -117,6 +117,9 @@ func Migrate(database *sql.DB) error {
 			FOREIGN KEY(asset_id) REFERENCES assets(id)
 		);`,
 		`ALTER TABLE positions ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0;`,
+		// User-entered average price; when set, syncs keep it instead of the
+		// source's value (Open Finance doesn't report cost basis for equities).
+		`ALTER TABLE positions ADD COLUMN avg_price_manual REAL;`,
 		`CREATE TABLE IF NOT EXISTS asset_quotes (
 			asset_id INTEGER PRIMARY KEY,
 			last_price REAL NOT NULL,
