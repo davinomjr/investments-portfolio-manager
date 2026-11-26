@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import type { Position } from "@/lib/api";
+import { setManualAvgPrice, type Position } from "@/lib/api";
 import { formatHoldingLabel, getAssetStyle } from "@/lib/asset-style";
 import { useVisibility } from "@/components/visibility-context";
 
@@ -74,6 +75,85 @@ function SortHeader({
         <span className="w-3 text-xs">{arrow}</span>
       </button>
     </th>
+  );
+}
+
+// Inline editor for the average price. Open Finance doesn't report cost
+// basis for equities, so the user can type it in; syncs keep it.
+function AvgPriceEditor({ position }: { position: Position }) {
+  const router = useRouter();
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const save = async (value: number | null) => {
+    setSaving(true);
+    setError(null);
+    try {
+      await setManualAvgPrice(position.ticker, value);
+      setEditing(false);
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!editing) {
+    return (
+      <button
+        type="button"
+        title={position.avg_price_manual ? "Average price set manually — click to edit" : "Click to set your average price"}
+        onClick={() => {
+          setDraft(position.avg_price ? String(position.avg_price) : "");
+          setEditing(true);
+        }}
+        className="underline decoration-dotted underline-offset-2 hover:text-white/80"
+      >
+        {formatCurrency(position.avg_price, position.currency)}
+        {position.avg_price_manual ? <span className="ml-1 text-[10px] uppercase tracking-[0.15em] text-amber-300/80">pm</span> : null}
+      </button>
+    );
+  }
+
+  const submit = () => {
+    const parsed = Number(draft.replace(",", "."));
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      setError("Enter a positive number");
+      return;
+    }
+    void save(parsed);
+  };
+
+  return (
+    <span className="inline-flex flex-wrap items-center gap-1">
+      <input
+        autoFocus
+        inputMode="decimal"
+        value={draft}
+        disabled={saving}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") submit();
+          if (e.key === "Escape") setEditing(false);
+        }}
+        className="w-24 rounded border border-white/20 bg-black/30 px-1.5 py-0.5 text-xs text-white"
+      />
+      <button type="button" onClick={submit} disabled={saving} className="text-emerald-300 hover:text-emerald-200">
+        ✓
+      </button>
+      {position.avg_price_manual ? (
+        <button type="button" onClick={() => void save(null)} disabled={saving} title="Clear manual price" className="text-rose-300 hover:text-rose-200">
+          ✕
+        </button>
+      ) : null}
+      <button type="button" onClick={() => setEditing(false)} disabled={saving} className="text-white/50 hover:text-white/80">
+        esc
+      </button>
+      {error ? <span className="w-full text-rose-300">{error}</span> : null}
+    </span>
   );
 }
 
@@ -160,7 +240,7 @@ export function PositionsTable({ positions }: { positions: Position[] }) {
                         <div className="flex flex-col leading-tight">
                           <span>{hasLast ? formatCurrency(position.last_price as number, position.currency) : "—"}</span>
                           <span className="text-xs text-white/45">
-                            {formatCurrency(position.avg_price, position.currency)}
+                            <AvgPriceEditor position={position} />
                             {position.day_change_pct !== null ? (
                               <span className={`ml-2 ${dayColor}`}>{formatPct(position.day_change_pct)}</span>
                             ) : null}

@@ -32,15 +32,17 @@ export default async function HomePage() {
   let history: PortfolioHistory = { points: [] };
   let latestB3Job: ImportJobResponse | null = null;
   let latestIbkrJob: ImportJobResponse | null = null;
+  let latestPluggyJob: ImportJobResponse | null = null;
   let loadError: string | null = null;
 
   try {
-    [portfolio, positions, history, latestB3Job, latestIbkrJob] = await Promise.all([
+    [portfolio, positions, history, latestB3Job, latestIbkrJob, latestPluggyJob] = await Promise.all([
       fetchPortfolio(),
       fetchPositions(),
       fetchPortfolioHistory(),
       fetchLatestImportJob(["b3", "manual_b3_export"]),
       fetchLatestImportJob(["ibkr"]),
+      fetchLatestImportJob(["pluggy"]),
     ]);
   } catch (error) {
     loadError = error instanceof Error ? error.message : "Failed to load portfolio data.";
@@ -53,7 +55,7 @@ export default async function HomePage() {
         <p className="text-xs text-white/55 sm:text-sm">B3 and IBKR holdings</p>
       </section>
 
-      <UploadPanel latestB3Job={latestB3Job} latestIbkrJob={latestIbkrJob} />
+      <UploadPanel latestB3Job={latestB3Job} latestIbkrJob={latestIbkrJob} latestPluggyJob={latestPluggyJob} />
       {loadError ? (
         <section className="rounded-[2rem] border border-white/15 bg-white/10 p-5 text-sm text-white">
           {loadError} Start the Go backend and refresh this page.
