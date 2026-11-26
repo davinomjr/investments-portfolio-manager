@@ -24,6 +24,7 @@ export type Allocation = {
   ticker: string;
   company_name?: string;
   asset_type: string;
+  source?: string;
   market_value: number;
   weight: number;
 };
