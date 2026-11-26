@@ -6,11 +6,12 @@ import type { ImportJobResponse } from "@/lib/api";
 
 const API_BASE = (process.env.NEXT_PUBLIC_BASE_PATH ?? "") + (process.env.NEXT_PUBLIC_API_BASE_URL ?? "/api");
 
-type ImportMethod = "upload" | "ibkr";
+type ImportMethod = "upload" | "ibkr" | "pluggy";
 
 const TABS: { id: ImportMethod; label: string; shortLabel: string }[] = [
   { id: "upload", label: "B3 sync", shortLabel: "B3" },
   { id: "ibkr", label: "IBKR sync", shortLabel: "IBKR" },
+  { id: "pluggy", label: "Open Finance", shortLabel: "Pluggy" },
 ];
 
 function formatTimestamp(iso: string): string {
@@ -70,9 +71,11 @@ function ImportStatusBadge({ label, job }: { label: string; job: ImportJobRespon
 export function UploadPanel({
   latestB3Job,
   latestIbkrJob,
+  latestPluggyJob,
 }: {
   latestB3Job?: ImportJobResponse | null;
   latestIbkrJob?: ImportJobResponse | null;
+  latestPluggyJob?: ImportJobResponse | null;
 }) {
   const router = useRouter();
   const [activeMethod, setActiveMethod] = useState<ImportMethod>("upload");
@@ -80,6 +83,8 @@ export function UploadPanel({
   const [isSyncing, startSyncTransition] = useTransition();
   const [ibkrResult, setIbkrResult] = useState<string | null>(null);
   const [isIbkrSyncing, startIbkrSyncTransition] = useTransition();
+  const [pluggyResult, setPluggyResult] = useState<string | null>(null);
+  const [isPluggySyncing, startPluggySyncTransition] = useTransition();
 
   const onFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -114,39 +119,41 @@ export function UploadPanel({
     });
   };
 
-  const onSyncIBKR = () => {
-    startIbkrSyncTransition(async () => {
-      setIbkrResult(null);
-      try {
-        const response = await fetch(`${API_BASE}/portfolio/import-ibkr`, { method: "POST" });
-        if (!response.ok) {
-          const payload = await response.json().catch(() => ({}));
-          setIbkrResult(payload.detail ?? "IBKR sync failed.");
+  // Kicks off a background sync job and polls the latest job for that source.
+  const runRemoteSync = async (source: "ibkr" | "pluggy", label: string, setResult: (msg: string | null) => void) => {
+    setResult(null);
+    try {
+      const response = await fetch(`${API_BASE}/portfolio/import-${source}`, { method: "POST" });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        setResult(payload.detail ?? `${label} sync failed.`);
+        return;
+      }
+      setResult(`Syncing ${label}… this may take a moment.`);
+      for (let i = 0; i < 30; i++) {
+        await new Promise((r) => setTimeout(r, 5000));
+        const jobRes = await fetch(`${API_BASE}/portfolio/import-jobs/latest?source=${source}`).catch(() => null);
+        if (!jobRes?.ok) continue;
+        const job = await jobRes.json().catch(() => null);
+        if (!job) continue;
+        if (job.status === "completed") {
+          setResult(job.detail ?? `${label} sync complete.`);
+          router.refresh();
           return;
         }
-        setIbkrResult("Syncing IBKR… this may take a moment.");
-        for (let i = 0; i < 30; i++) {
-          await new Promise((r) => setTimeout(r, 5000));
-          const jobRes = await fetch(`${API_BASE}/portfolio/import-jobs/latest`).catch(() => null);
-          if (!jobRes?.ok) continue;
-          const job = await jobRes.json().catch(() => null);
-          if (!job) continue;
-          if (job.status === "completed") {
-            setIbkrResult(job.detail ?? "IBKR sync complete.");
-            router.refresh();
-            return;
-          }
-          if (job.status === "failed") {
-            setIbkrResult(job.detail ?? "IBKR sync failed.");
-            return;
-          }
+        if (job.status === "failed") {
+          setResult(job.detail ?? `${label} sync failed.`);
+          return;
         }
-        setIbkrResult("IBKR sync is taking longer than expected — check back shortly.");
-      } catch (error) {
-        setIbkrResult(error instanceof Error ? error.message : "IBKR sync failed.");
       }
-    });
+      setResult(`${label} sync is taking longer than expected — check back shortly.`);
+    } catch (error) {
+      setResult(error instanceof Error ? error.message : `${label} sync failed.`);
+    }
   };
+
+  const onSyncIBKR = () => startIbkrSyncTransition(() => runRemoteSync("ibkr", "IBKR", setIbkrResult));
+  const onSyncPluggy = () => startPluggySyncTransition(() => runRemoteSync("pluggy", "Open Finance", setPluggyResult));
 
   return (
     <section className="rounded-[2rem] border border-white/15 bg-[#222530] p-5 shadow-[0_18px_60px_rgba(0,0,0,0.25)] md:p-6">
@@ -158,6 +165,7 @@ export function UploadPanel({
         <div className="flex flex-col items-start gap-2 sm:items-end">
           <ImportStatusBadge label="B3" job={latestB3Job ?? null} />
           <ImportStatusBadge label="IBKR" job={latestIbkrJob ?? null} />
+          <ImportStatusBadge label="Open Finance" job={latestPluggyJob ?? null} />
         </div>
       </div>
 
@@ -211,8 +219,23 @@ export function UploadPanel({
           </div>
         )}
 
+        {activeMethod === "pluggy" && (
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <p className="text-sm text-white/65">Pull B3 positions from your brokers via Open Finance (Meu Pluggy).</p>
+            <button
+              type="button"
+              onClick={onSyncPluggy}
+              disabled={isPluggySyncing}
+              className="inline-flex cursor-pointer items-center justify-center rounded-full border border-white bg-white px-5 py-3 text-sm font-semibold text-[#1a1d25] transition hover:bg-transparent hover:text-white disabled:opacity-50"
+            >
+              {isPluggySyncing ? "Syncing..." : "Sync Open Finance"}
+            </button>
+          </div>
+        )}
+
         {activeMethod === "upload" && message ? <p className="mt-3 text-sm text-white/65">{message}</p> : null}
         {activeMethod === "ibkr" && ibkrResult ? <p className="mt-3 text-sm text-white/65">{ibkrResult}</p> : null}
+        {activeMethod === "pluggy" && pluggyResult ? <p className="mt-3 text-sm text-white/65">{pluggyResult}</p> : null}
       </div>
     </section>
   );

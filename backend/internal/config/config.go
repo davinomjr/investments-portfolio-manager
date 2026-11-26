@@ -31,6 +31,12 @@ type Config struct {
 	AuthJWTExpiry                   time.Duration
 	IBKRFlexToken                   string
 	IBKRFlexQueryID                 string
+	PluggyClientID                  string
+	PluggyClientSecret              string
+	PluggyItemIDs                   []string
+	PluggyBaseURL                   string
+	PluggyReplacesB3                bool
+	PluggySyncInterval              time.Duration
 	PushToken                       string
 	CORSOrigins                     []string
 	QuotesEnabled                   bool
@@ -68,6 +74,12 @@ func Load() Config {
 		AuthJWTExpiry:                   durationEnv("AUTH_JWT_EXPIRY", 168*time.Hour),
 		IBKRFlexToken:                   os.Getenv("IBKR_FLEX_TOKEN"),
 		IBKRFlexQueryID:                 os.Getenv("IBKR_FLEX_QUERY_ID"),
+		PluggyClientID:                  os.Getenv("PLUGGY_CLIENT_ID"),
+		PluggyClientSecret:              os.Getenv("PLUGGY_CLIENT_SECRET"),
+		PluggyItemIDs:                   parseCORSOrigins(os.Getenv("PLUGGY_ITEM_IDS")),
+		PluggyBaseURL:                   os.Getenv("PLUGGY_BASE_URL"),
+		PluggyReplacesB3:                boolEnv("PLUGGY_REPLACES_B3", false),
+		PluggySyncInterval:              durationEnv("PLUGGY_SYNC_INTERVAL", 0),
 		PushToken:                       os.Getenv("PUSH_TOKEN"),
 		CORSOrigins:                     parseCORSOrigins(env("CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000")),
 		QuotesEnabled:                   boolEnv("QUOTES_ENABLED", true),

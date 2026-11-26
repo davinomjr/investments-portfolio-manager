@@ -4,6 +4,7 @@ export type Position = {
   asset_type: string;
   quantity: number;
   avg_price: number;
+  avg_price_manual: boolean;
   currency: string;
   broker: string | null;
   source: string;
@@ -219,6 +220,20 @@ export async function setPositionsVisibility(visible: boolean): Promise<void> {
   });
   if (!response.ok && response.status !== 204) {
     throw new Error("Failed to update positions visibility.");
+  }
+}
+
+// Stores a user-entered average price (kept across syncs); null clears it.
+export async function setManualAvgPrice(ticker: string, avgPrice: number | null): Promise<void> {
+  const base = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+  const response = await fetch(`${base}/api/positions/${encodeURIComponent(ticker)}/avg-price`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ avg_price: avgPrice }),
+  });
+  if (!response.ok && response.status !== 204) {
+    const payload = await response.json().catch(() => ({}));
+    throw new Error(payload.detail ?? "Failed to update average price.");
   }
 }
 

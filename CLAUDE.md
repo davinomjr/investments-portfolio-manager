@@ -168,6 +168,7 @@ Managed automatically by Go migrations in `internal/db/db.go`. Tables:
 | `sentiment_snapshots` | Cached sentiment scores with TTL |
 | `sentiment_sources` | Individual data points feeding a snapshot |
 | `sentiment_refresh_log` | Audit trail for sentiment refreshes |
+| `positions.avg_price_manual` | User-entered average price; `upsertHoldings` keeps it over the source's value |
 | `position_snapshots` | One row per position per day (BRT), written after each successful sync; feeds the growth chart |
 
 Reference DDL for the original PostgreSQL design is in `database/init.sql` (not used at runtime).
@@ -186,6 +187,9 @@ Reference DDL for the original PostgreSQL design is in `database/init.sql` (not 
 | `GET` | `/portfolio/monte-carlo` | Run Monte Carlo simulation |
 | `GET` | `/portfolio/sentiment` | Sentiment analysis snapshot |
 | `GET` | `/portfolio/results` | Quarterly earnings results |
+| `POST` | `/portfolio/import-pluggy` | Open Finance sync via Meu Pluggy (202); `/portfolio/import-pluggy-trigger` is the push-token variant |
+| `GET` | `/portfolio/pluggy/preview` | Mapped Pluggy holdings without writing (`?raw=1` adds the raw API payload) |
+| `PATCH` | `/positions/{ticker}/avg-price` | Set a manual average price that syncs keep (`{"avg_price": null}` clears it) |
 
 ---
 
@@ -263,7 +267,16 @@ IBKR_FLEX_TOKEN=<token>
 IBKR_FLEX_QUERY_ID=<query id>
 CORS_ORIGINS=https://davinomjr.com,https://frontend-production-1e40.up.railway.app
 HEADLESS=true
+PLUGGY_CLIENT_ID=<dashboard.pluggy.ai app client id>
+PLUGGY_CLIENT_SECRET=<app client secret>
+PLUGGY_ITEM_IDS=<MeuPluggy item id(s), comma-separated>
+PLUGGY_SYNC_INTERVAL=6h     # optional in-process schedule; unset = manual/trigger only
+PLUGGY_REPLACES_B3=true     # optional: after a Pluggy sync, drop leftover source='b3' positions
 ```
+
+### Open Finance sync (Pluggy)
+
+Replaces the B3 browser sync. The user connects brokers at meu.pluggy.ai; a dashboard.pluggy.ai app connects to them through the **MeuPluggy connector (id 200)**. On the free plan items can only be created through the Pluggy Connect widget, and `GET /v2/items` lists an app's items. Equities come back without cost basis (`amountOriginal` null), so the closing price is used as the average price unless the user sets one manually. Treasury bonds are mapped to the worker's `TD<INDEXER><YEAR>` tickers so quotes and history keep working.
 
 The backend binds to Railway's injected `PORT` env var via `railwayAddr()` in `backend/internal/config/config.go`. Never hardcode `ADDR` — it breaks the healthcheck.
 

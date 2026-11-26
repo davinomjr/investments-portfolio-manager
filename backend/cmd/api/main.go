@@ -28,6 +28,7 @@ func main() {
 
 	service := services.New(database, cfg)
 	service.WarmTesouroDireto()
+	service.StartPluggyScheduler(cfg.PluggySyncInterval)
 	server := &http.Server{
 		Addr:    cfg.Addr,
 		Handler: httpapi.New(service, cfg),
