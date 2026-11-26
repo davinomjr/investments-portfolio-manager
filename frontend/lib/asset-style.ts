@@ -91,7 +91,7 @@ export function getAssetStyle(assetType: string) {
   return ASSET_STYLES[assetType] ?? ASSET_STYLES.other;
 }
 
-const FRIENDLY_LABEL_TYPES = new Set(["government_bond", "other"]);
+const FRIENDLY_LABEL_TYPES = new Set(["government_bond", "fund", "other"]);
 
 export function formatHoldingLabel(
   ticker: string,

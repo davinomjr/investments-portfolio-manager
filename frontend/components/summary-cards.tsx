@@ -36,13 +36,13 @@ export function SummaryCards({ portfolio }: { portfolio: Portfolio }) {
       : "Quotes unavailable";
 
   return (
-    <section className="grid gap-3 sm:grid-cols-3 md:gap-4">
-      <article className="rounded-[2rem] border border-white/20 bg-white/15 p-4 shadow-[0_20px_60px_rgba(0,0,0,0.4)] md:p-6">
-        <div className="flex items-baseline justify-between gap-2">
+    <section className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-3">
+      <article className="col-span-2 min-w-0 rounded-[2rem] border border-white/20 bg-white/15 p-4 shadow-[0_20px_60px_rgba(0,0,0,0.4)] md:p-6 lg:col-span-1">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1">
           <p className="text-xs uppercase tracking-[0.3em] text-white/55">Total Value</p>
           <span className="text-[10px] uppercase tracking-[0.25em] text-white/40">{statusLabel}</span>
         </div>
-        <p className="mt-3 text-3xl font-semibold md:mt-4 md:text-4xl">{visible ? formatCurrency(portfolio.market_value_brl) : "**"}</p>
+        <p className="mt-3 whitespace-nowrap text-3xl font-semibold tabular-nums md:mt-4 xl:text-4xl">{visible ? formatCurrency(portfolio.market_value_brl) : "**"}</p>
         {visible ? (
           <p className="mt-2 text-xs text-white/55">
             Cost basis {formatCurrency(portfolio.estimated_cost_basis)}
@@ -56,15 +56,15 @@ export function SummaryCards({ portfolio }: { portfolio: Portfolio }) {
           <p className="mt-2 text-xs text-white/55">**</p>
         )}
       </article>
-      <article className="rounded-[2rem] border border-white/15 bg-[#222530] p-4 md:p-6">
+      <article className="min-w-0 rounded-[2rem] border border-white/15 bg-[#222530] p-4 md:p-6">
         <p className="text-xs uppercase tracking-[0.3em] text-white/55">Positions</p>
         <p className="mt-3 text-3xl font-semibold md:mt-4 md:text-4xl">{portfolio.total_positions}</p>
       </article>
-      <article className="rounded-[2rem] border border-white/15 bg-[#222530] p-4 md:p-6">
+      <article className="min-w-0 rounded-[2rem] border border-white/15 bg-[#222530] p-4 md:p-6">
         <p className="text-xs uppercase tracking-[0.3em] text-white/55">Largest Weight</p>
         {largestAllocation ? (
           <>
-            <p className="mt-3 text-2xl font-semibold md:mt-4">{visible ? `${formatHoldingLabel(largestAllocation.ticker, largestAllocation.company_name, largestAllocation.asset_type)} ${(largestAllocation.weight * 100).toFixed(1)}%` : "**"}</p>
+            <p className="mt-3 break-words text-xl font-semibold md:mt-4 md:text-2xl">{visible ? `${formatHoldingLabel(largestAllocation.ticker, largestAllocation.company_name, largestAllocation.asset_type)} ${(largestAllocation.weight * 100).toFixed(1)}%` : "**"}</p>
             <span
               className="mt-3 inline-flex rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em]"
               style={{
