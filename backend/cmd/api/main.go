@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"os"
@@ -28,7 +29,7 @@ func main() {
 
 	service := services.New(database, cfg)
 	service.WarmTesouroDireto()
-	service.StartPluggyScheduler(cfg.PluggySyncInterval)
+	service.StartSyncScheduler(context.Background())
 	server := &http.Server{
 		Addr:    cfg.Addr,
 		Handler: httpapi.New(service, cfg),

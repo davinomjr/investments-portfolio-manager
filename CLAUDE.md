@@ -270,13 +270,17 @@ HEADLESS=true
 PLUGGY_CLIENT_ID=<dashboard.pluggy.ai app client id>
 PLUGGY_CLIENT_SECRET=<app client secret>
 PLUGGY_ITEM_IDS=<MeuPluggy item id(s), comma-separated>
-PLUGGY_SYNC_INTERVAL=6h     # optional in-process schedule; unset = manual/trigger only
+SYNC_TIMES=08:00,20:00      # optional daily BRT times for the built-in Pluggy + IBKR scheduler; unset = manual/trigger only
 PLUGGY_REPLACES_B3=true     # optional: after a Pluggy sync, drop leftover source='b3' positions
 ```
 
 ### Open Finance sync (Pluggy)
 
 Replaces the B3 browser sync. The user connects brokers at meu.pluggy.ai; a dashboard.pluggy.ai app connects to them through the **MeuPluggy connector (id 200)**. On the free plan items can only be created through the Pluggy Connect widget, and `GET /v2/items` lists an app's items. Equities come back without cost basis (`amountOriginal` null), so the closing price is used as the average price unless the user sets one manually. Treasury bonds are mapped to the worker's `TD<INDEXER><YEAR>` tickers so quotes and history keep working.
+
+### Sync scheduler
+
+`services/scheduler.go` runs every configured source (Pluggy, then IBKR) at the `SYNC_TIMES` BRT times. One minute after startup it catches up any source whose last completed `import_jobs` row is older than 12h (so deploys never skip a day), skips a source that already has a recent `running` job, and retries a failed source once after 30 minutes. Sources without credentials are ignored. With `SYNC_TIMES` set in production, the Mac LaunchAgent below is no longer needed.
 
 The backend binds to Railway's injected `PORT` env var via `railwayAddr()` in `backend/internal/config/config.go`. Never hardcode `ADDR` — it breaks the healthcheck.
 

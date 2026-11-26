@@ -36,7 +36,7 @@ type Config struct {
 	PluggyItemIDs                   []string
 	PluggyBaseURL                   string
 	PluggyReplacesB3                bool
-	PluggySyncInterval              time.Duration
+	SyncTimes                       string
 	PushToken                       string
 	CORSOrigins                     []string
 	QuotesEnabled                   bool
@@ -79,7 +79,7 @@ func Load() Config {
 		PluggyItemIDs:                   parseCORSOrigins(os.Getenv("PLUGGY_ITEM_IDS")),
 		PluggyBaseURL:                   os.Getenv("PLUGGY_BASE_URL"),
 		PluggyReplacesB3:                boolEnv("PLUGGY_REPLACES_B3", false),
-		PluggySyncInterval:              durationEnv("PLUGGY_SYNC_INTERVAL", 0),
+		SyncTimes:                       os.Getenv("SYNC_TIMES"),
 		PushToken:                       os.Getenv("PUSH_TOKEN"),
 		CORSOrigins:                     parseCORSOrigins(env("CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000")),
 		QuotesEnabled:                   boolEnv("QUOTES_ENABLED", true),
