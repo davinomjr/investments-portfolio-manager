@@ -84,32 +84,60 @@ func normalizeRate(value float64) float64 {
 	return value
 }
 
-func (s *Service) ImportIBKR(ctx context.Context) (models.ImportJobResponse, error) {
+func (s *Service) ibkrConfigured() error {
 	if s.Config.IBKRFlexToken == "" || s.Config.IBKRFlexQueryID == "" {
-		return models.ImportJobResponse{}, fmt.Errorf("IBKR_FLEX_TOKEN and IBKR_FLEX_QUERY_ID must be configured")
+		return fmt.Errorf("IBKR_FLEX_TOKEN and IBKR_FLEX_QUERY_ID must be configured")
+	}
+	return nil
+}
+
+// ImportIBKR starts an IBKR Flex sync in the background (202 + job).
+func (s *Service) ImportIBKR(ctx context.Context) (models.ImportJobResponse, error) {
+	if err := s.ibkrConfigured(); err != nil {
+		return models.ImportJobResponse{}, err
 	}
 	jobID, job, err := s.createJob(ctx, "ibkr", "running", "IBKR import started")
 	if err != nil {
 		return models.ImportJobResponse{}, err
 	}
-	go func() {
-		bgCtx := context.Background()
-		holdings, err := s.runWorkerWithEnv(bgCtx, []string{"import-ibkr", "--json"}, map[string]string{
-			"IBKR_FLEX_TOKEN":    s.Config.IBKRFlexToken,
-			"IBKR_FLEX_QUERY_ID": s.Config.IBKRFlexQueryID,
-		})
-		if err != nil {
-			s.updateJob(bgCtx, jobID, "failed", err.Error())
-			return
-		}
-		if err := s.upsertHoldings(bgCtx, holdings, "ibkr"); err != nil {
-			s.updateJob(bgCtx, jobID, "failed", err.Error())
-			return
-		}
-		s.updateJob(bgCtx, jobID, "completed", fmt.Sprintf("Imported %d positions from IBKR", len(holdings)))
-		s.snapshotAfterImport()
-	}()
+	go func() { _ = s.runIBKRJob(context.Background(), jobID) }()
 	return job, nil
+}
+
+// runIBKRJob runs an IBKR sync synchronously, recording the outcome on jobID.
+func (s *Service) runIBKRJob(ctx context.Context, jobID int64) error {
+	holdings, err := s.runWorkerWithEnv(ctx, []string{"import-ibkr", "--json"}, map[string]string{
+		"IBKR_FLEX_TOKEN":    s.Config.IBKRFlexToken,
+		"IBKR_FLEX_QUERY_ID": s.Config.IBKRFlexQueryID,
+	})
+	if err == nil {
+		err = s.upsertHoldings(ctx, holdings, "ibkr")
+	}
+	if err != nil {
+		s.updateJob(ctx, jobID, "failed", err.Error())
+		return err
+	}
+	s.updateJob(ctx, jobID, "completed", fmt.Sprintf("Imported %d positions from IBKR", len(holdings)))
+	s.snapshotAfterImport()
+	return nil
+}
+
+// lastCompletedImport returns when the newest completed job for source
+// finished; ok is false when that source never completed a sync.
+func (s *Service) lastCompletedImport(ctx context.Context, source string) (time.Time, bool, error) {
+	var updated string
+	err := s.DB.QueryRowContext(ctx, `SELECT updated_at FROM import_jobs WHERE source=? AND status='completed' ORDER BY id DESC LIMIT 1`, source).Scan(&updated)
+	if errors.Is(err, sql.ErrNoRows) {
+		return time.Time{}, false, nil
+	}
+	if err != nil {
+		return time.Time{}, false, err
+	}
+	t, err := time.Parse(time.RFC3339, updated)
+	if err != nil {
+		return time.Time{}, false, err
+	}
+	return t, true, nil
 }
 
 func (s *Service) ImportFile(ctx context.Context, file multipart.File, filename string) (models.ImportJobResponse, error) {
