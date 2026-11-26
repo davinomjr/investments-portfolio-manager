@@ -35,6 +35,34 @@ func TestPluggyAssetType(t *testing.T) {
 	}
 }
 
+func TestPluggyDisplayNames(t *testing.T) {
+	treasury := []struct {
+		inv  PluggyInvestment
+		want string
+	}{
+		{PluggyInvestment{Name: "LFT", RateType: "SELIC", DueDate: "2031-03-01T03:00:00.000Z"}, "TD SELIC 2031"},
+		{PluggyInvestment{Name: "NTNB PRINC", RateType: "IPCA", DueDate: "2040-08-15T03:00:00.000Z"}, "TD NTNB 2040"},
+		{PluggyInvestment{Name: "NTN-B", RateType: "IPCA", DueDate: "2035-05-15T03:00:00.000Z"}, "TD NTNB JS 2035"},
+		{PluggyInvestment{Name: "LTN", DueDate: "2029-01-01T03:00:00.000Z"}, "TD PRE 2029"},
+		{PluggyInvestment{Name: "NTN-F", DueDate: "2033-01-01T03:00:00.000Z"}, "TD PRE JS 2033"},
+	}
+	for _, c := range treasury {
+		if got := pluggyTreasuryLabel(c.inv); got != c.want {
+			t.Errorf("pluggyTreasuryLabel(%q)=%q want %q", c.inv.Name, got, c.want)
+		}
+	}
+	funds := map[string]string{
+		"Sparta Debêntures Incentivadas Inflação FIC de Fundos Incentivados de Investimento Financeiro": "Sparta Debêntures Incentivadas Inflação",
+		"Plural Debentures Incentivadas Hedge 30 FIC FIF RF CP RL":                                      "Plural Debentures Incentivadas Hedge",
+		"Kinea FIC FIM": "Kinea",
+	}
+	for in, want := range funds {
+		if got := shortFundName(in); got != want {
+			t.Errorf("shortFundName(%q)=%q want %q", in, got, want)
+		}
+	}
+}
+
 func TestPluggyTreasuryTicker(t *testing.T) {
 	cases := []struct {
 		inv  PluggyInvestment

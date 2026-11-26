@@ -233,14 +233,17 @@ func mapPluggyInvestments(investments []PluggyInvestment) ([]models.HoldingPaylo
 		}
 
 		var ticker string
+		displayName := inv.Name
 		switch assetType {
 		case "government_bond":
 			ticker = pluggyTreasuryTicker(inv)
+			displayName = pluggyTreasuryLabel(inv)
 		case "fund", "other":
 			ticker = normalizeTickerText(inv.Name)
 			if len(ticker) > 40 {
 				ticker = ticker[:40]
 			}
+			displayName = shortFundName(inv.Name)
 		default:
 			ticker = strings.ToUpper(strings.TrimSpace(inv.Code))
 		}
@@ -282,7 +285,7 @@ func mapPluggyInvestments(investments []PluggyInvestment) ([]models.HoldingPaylo
 			Broker:       broker,
 			AssetType:    assetType,
 			Currency:     defaultString(inv.CurrencyCode, "BRL"),
-			CompanyName:  inv.Name,
+			CompanyName:  displayName,
 		})
 	}
 	for i := range holdings {
@@ -357,6 +360,68 @@ func pluggyTreasuryTicker(inv PluggyInvestment) string {
 		}
 	}
 	return "TD" + indexer + year
+}
+
+// pluggyTreasuryLabel gives a short, readable name for a Tesouro bond, e.g.
+// "TD NTNB 2040" (NTN-B Principal), "TD NTNB JS 2035" (NTN-B with semiannual
+// coupons) or "TD SELIC 2031" (LFT).
+func pluggyTreasuryLabel(inv PluggyInvestment) string {
+	year := ""
+	if len(inv.DueDate) >= 4 {
+		year = inv.DueDate[:4]
+	}
+	name := normalizeTickerText(inv.Name)
+	bond := ""
+	switch {
+	case strings.HasPrefix(name, "LFT"):
+		bond = "SELIC"
+	case strings.HasPrefix(name, "LTN"):
+		bond = "PRE"
+	case strings.HasPrefix(name, "NTNF"):
+		bond = "PRE JS"
+	case strings.HasPrefix(name, "NTNBPRINC"):
+		bond = "NTNB"
+	case strings.HasPrefix(name, "NTNB1"), strings.HasPrefix(name, "NTNB"):
+		bond = "NTNB JS"
+	case strings.HasPrefix(name, "NTNC"):
+		bond = "IGPM"
+	default:
+		indexer, _, ok := parseTDTicker(pluggyTreasuryTicker(inv))
+		if !ok {
+			return strings.TrimSpace(inv.Name)
+		}
+		bond = indexer
+	}
+	return strings.TrimSpace("TD " + bond + " " + year)
+}
+
+// fundNameStopWords mark where a fund's legal name stops being descriptive
+// ("Sparta Debêntures Incentivadas Inflação FIC de Fundos ...").
+var fundNameStopWords = map[string]struct{}{
+	"FIC": {}, "FIF": {}, "FI": {}, "FIM": {}, "FIA": {}, "FIRF": {}, "RF": {}, "CP": {}, "RL": {},
+	"DE": {}, "FUNDO": {}, "FUNDOS": {}, "-": {}, "–": {},
+}
+
+// shortFundName keeps up to the first four descriptive words of a fund name.
+func shortFundName(name string) string {
+	words := strings.Fields(name)
+	out := make([]string, 0, 4)
+	for _, w := range words {
+		if _, stop := fundNameStopWords[strings.ToUpper(w)]; stop && len(out) > 0 {
+			break
+		}
+		if len(out) > 0 && strings.IndexFunc(w, func(r rune) bool { return r >= '0' && r <= '9' }) == 0 {
+			break // stop before share-class numbers like "Hedge 30"
+		}
+		out = append(out, w)
+		if len(out) == 4 {
+			break
+		}
+	}
+	if len(out) == 0 {
+		return strings.TrimSpace(name)
+	}
+	return strings.Join(out, " ")
 }
 
 // normalizeTickerText mirrors worker/app/parser.py normalize_ticker.
