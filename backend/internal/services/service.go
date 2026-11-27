@@ -39,9 +39,13 @@ type Service struct {
 	fxMu        sync.Mutex
 	fxRate      float64
 	fxFetchedAt time.Time
+	fxFailedAt  time.Time
+	fxFetchMu   sync.Mutex // one FX fetch at a time
 
-	quotesMu    sync.RWMutex
-	quotesCache map[string]quoteCacheEntry
+	quotesMu      sync.RWMutex
+	quotesCache   map[string]quoteCacheEntry
+	quoteFailures map[string]time.Time // ticker → last failed fetch
+	yahooResolved map[string]string    // ticker → Yahoo symbol that worked
 
 	tdMu         sync.Mutex
 	tdSnapshot   map[string]tdProduct
@@ -56,7 +60,9 @@ func New(db *sql.DB, cfg config.Config) *Service {
 		DB:          db,
 		Config:      cfg,
 		Client:      &http.Client{Timeout: 60 * time.Second},
-		quotesCache: map[string]quoteCacheEntry{},
+		quotesCache:   map[string]quoteCacheEntry{},
+		quoteFailures: map[string]time.Time{},
+		yahooResolved: map[string]string{},
 	}
 }
 
@@ -298,19 +304,23 @@ const usdToBRLCacheTTL = time.Hour
 // usdToBRLCacheTTL. On API failure it returns the most recent cached rate,
 // or fallbackUSDToBRL if the API has never succeeded.
 func (s *Service) getUSDToBRL(ctx context.Context) float64 {
-	s.fxMu.Lock()
-	if s.fxRate > 0 && time.Since(s.fxFetchedAt) < usdToBRLCacheTTL {
-		rate := s.fxRate
-		s.fxMu.Unlock()
+	if rate, ok := s.cachedUSDToBRL(); ok {
 		return rate
 	}
-	s.fxMu.Unlock()
+	// Serialise fetches so concurrent page loads (/portfolio + /positions)
+	// don't each hit the FX APIs; later callers reuse the first result.
+	s.fxFetchMu.Lock()
+	defer s.fxFetchMu.Unlock()
+	if rate, ok := s.cachedUSDToBRL(); ok {
+		return rate
+	}
 
 	rate, err := s.fetchUSDToBRL(ctx)
 	s.fxMu.Lock()
 	defer s.fxMu.Unlock()
 	if err != nil {
 		log.Printf("usd-brl fetch failed: %v", err)
+		s.fxFailedAt = time.Now()
 		if s.fxRate > 0 {
 			return s.fxRate
 		}
@@ -320,6 +330,27 @@ func (s *Service) getUSDToBRL(ctx context.Context) float64 {
 	s.fxFetchedAt = time.Now()
 	return rate
 }
+
+// cachedUSDToBRL returns a rate without hitting the network: the cached rate
+// while fresh, or — right after a failed fetch — the last known (or
+// fallback) rate, so a rate-limited API isn't retried on every request.
+func (s *Service) cachedUSDToBRL() (float64, bool) {
+	s.fxMu.Lock()
+	defer s.fxMu.Unlock()
+	if s.fxRate > 0 && time.Since(s.fxFetchedAt) < usdToBRLCacheTTL {
+		return s.fxRate, true
+	}
+	if !s.fxFailedAt.IsZero() && time.Since(s.fxFailedAt) < fxFailureBackoff {
+		if s.fxRate > 0 {
+			return s.fxRate, true
+		}
+		return fallbackUSDToBRL, true
+	}
+	return 0, false
+}
+
+// fxFailureBackoff is how long after a failed FX fetch we skip retrying.
+const fxFailureBackoff = 15 * time.Minute
 
 func (s *Service) fetchUSDToBRL(ctx context.Context) (float64, error) {
 	if r, err := s.fetchUSDToBRLAwesome(ctx); err == nil {
@@ -410,7 +441,11 @@ func (s *Service) GetPortfolio(ctx context.Context) (models.PortfolioResponse, e
 		case "stale":
 			staleCount++
 		case "missing":
-			missingCount++
+			// Funds and international bonds have no quote source at all;
+			// they shouldn't make the dashboard read "Partial quotes".
+			if isQuotableAssetType(p.AssetType) {
+				missingCount++
+			}
 		}
 		allocations = append(allocations, models.AllocationItem{
 			Ticker:      p.Ticker,

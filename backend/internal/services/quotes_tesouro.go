@@ -84,6 +84,9 @@ func (s *Service) fetchTesouroDiretoQuote(ctx context.Context, ticker string) (Q
 	}, nil
 }
 
+// errTDSnapshotWarming is returned while the first Tesouro snapshot loads.
+var errTDSnapshotWarming = errors.New("td: snapshot warming")
+
 // tesouroDiretoSnapshot returns the cached TD product index without blocking
 // on a network fetch. If the snapshot is missing or older than
 // TesouroDiretoTTL, a background refresh is triggered and the current (or
@@ -99,7 +102,7 @@ func (s *Service) tesouroDiretoSnapshot(_ context.Context) (map[string]tdProduct
 	}
 	s.tdMu.Unlock()
 	if snap == nil {
-		return nil, fmt.Errorf("td: snapshot warming")
+		return nil, errTDSnapshotWarming
 	}
 	return snap, nil
 }
