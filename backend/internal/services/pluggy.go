@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"math"
 	"net/http"
 	"net/url"
@@ -461,55 +460,43 @@ func (s *Service) ImportPluggy(ctx context.Context) (models.ImportJobResponse, e
 	go func() {
 		bgCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 		defer cancel()
-		investments, err := s.fetchPluggyInvestments(bgCtx)
-		if err != nil {
-			s.updateJob(bgCtx, jobID, "failed", err.Error())
-			return
-		}
-		holdings, skipped := mapPluggyInvestments(investments)
-		if len(holdings) == 0 {
-			s.updateJob(bgCtx, jobID, "failed", "Pluggy returned no importable positions")
-			return
-		}
-		if err := s.upsertHoldings(bgCtx, holdings, "pluggy"); err != nil {
-			s.updateJob(bgCtx, jobID, "failed", err.Error())
-			return
-		}
-		detail := fmt.Sprintf("Imported %d positions from Pluggy (%d skipped)", len(holdings), len(skipped))
-		if s.Config.PluggyReplacesB3 {
-			// Positions B3 still owns after the upsert are ones Pluggy no
-			// longer reports (sold, or a broker not connected to Meu Pluggy).
-			removed, err := s.removePositionsBySource(bgCtx, "b3")
-			if err != nil {
-				s.updateJob(bgCtx, jobID, "failed", err.Error())
-				return
-			}
-			if removed > 0 {
-				detail += fmt.Sprintf(", removed %d leftover B3 positions", removed)
-			}
-		}
-		s.updateJob(bgCtx, jobID, "completed", detail)
-		s.snapshotAfterImport()
+		_ = s.runPluggyJob(bgCtx, jobID)
 	}()
 	return job, nil
 }
 
-// StartPluggyScheduler runs ImportPluggy every interval while the process
-// lives (Meu Pluggy itself refreshes items about once a day).
-func (s *Service) StartPluggyScheduler(interval time.Duration) {
-	if interval <= 0 || s.pluggyConfigured() != nil {
-		return
+// runPluggyJob runs a Pluggy sync synchronously, recording the outcome on jobID.
+func (s *Service) runPluggyJob(ctx context.Context, jobID int64) error {
+	fail := func(err error) error {
+		s.updateJob(ctx, jobID, "failed", err.Error())
+		return err
 	}
-	go func() {
-		ticker := time.NewTicker(interval)
-		defer ticker.Stop()
-		for range ticker.C {
-			if _, err := s.ImportPluggy(context.Background()); err != nil {
-				log.Printf("pluggy scheduled sync: %v", err)
-			}
+	investments, err := s.fetchPluggyInvestments(ctx)
+	if err != nil {
+		return fail(err)
+	}
+	holdings, skipped := mapPluggyInvestments(investments)
+	if len(holdings) == 0 {
+		return fail(fmt.Errorf("Pluggy returned no importable positions"))
+	}
+	if err := s.upsertHoldings(ctx, holdings, "pluggy"); err != nil {
+		return fail(err)
+	}
+	detail := fmt.Sprintf("Imported %d positions from Pluggy (%d skipped)", len(holdings), len(skipped))
+	if s.Config.PluggyReplacesB3 {
+		// Positions B3 still owns after the upsert are ones Pluggy no
+		// longer reports (sold, or a broker not connected to Meu Pluggy).
+		removed, err := s.removePositionsBySource(ctx, "b3")
+		if err != nil {
+			return fail(err)
 		}
-	}()
-	log.Printf("pluggy scheduled sync every %s", interval)
+		if removed > 0 {
+			detail += fmt.Sprintf(", removed %d leftover B3 positions", removed)
+		}
+	}
+	s.updateJob(ctx, jobID, "completed", detail)
+	s.snapshotAfterImport()
+	return nil
 }
 
 func truncate(s string, n int) string {
