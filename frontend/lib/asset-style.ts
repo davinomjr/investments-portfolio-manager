@@ -106,12 +106,12 @@ export function formatHoldingLabel(
 
 // Allocation buckets shown in the portfolio pie chart. Everything held at
 // IBKR is "International" regardless of its asset type.
-export type AllocationBucket = "International" | "Stocks" | "FII" | "Fixed Income";
+export type AllocationBucket = "International" | "Stocks" | "Real Estate" | "Fixed Income";
 
 export const ALLOCATION_BUCKET_COLORS: Record<AllocationBucket, string> = {
   International: "#a855f7",
   Stocks: "#2563eb",
-  FII: "#0891b2",
+  "Real Estate": "#0891b2",
   "Fixed Income": "#16a34a",
 };
 
@@ -122,7 +122,7 @@ export function allocationBucket(assetType: string, source?: string): Allocation
   switch (assetType) {
     case "fii":
     case "etf_or_fii":
-      return "FII";
+      return "Real Estate";
     case "government_bond":
     case "fund":
     case "other":
