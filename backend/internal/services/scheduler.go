@@ -123,32 +123,37 @@ func (sch *syncScheduler) runAll(ctx context.Context, sources []syncSource, reas
 	defer sch.mu.Unlock()
 	failed := make([]syncSource, 0)
 	for _, src := range sources {
-		if err := sch.runSource(ctx, src, reason); err != nil {
+		ran, err := sch.runSource(ctx, src, reason)
+		switch {
+		case err != nil:
 			log.Printf("sync scheduler: %s %s sync failed: %v", reason, src.name, err)
 			failed = append(failed, src)
+		case ran:
+			log.Printf("sync scheduler: %s %s sync completed", reason, src.name)
 		}
 	}
 	return failed
 }
 
-func (sch *syncScheduler) runSource(ctx context.Context, src syncSource, reason string) error {
+// runSource runs one source; ran is false when it was skipped.
+func (sch *syncScheduler) runSource(ctx context.Context, src syncSource, reason string) (ran bool, err error) {
 	if src.configured() != nil {
-		return nil // not set up on this deployment
+		return false, nil // not set up on this deployment
 	}
 	// Skip when a manual/trigger sync of the same source is still running.
 	if job, err := sch.svc.GetLatestImportJob(ctx, []string{src.name}); err == nil && job.Status == "running" {
 		if started, perr := time.Parse(time.RFC3339, job.UpdatedAt); perr == nil && sch.now().Sub(started) < src.timeout {
 			log.Printf("sync scheduler: %s already running (job %d), skipping", src.name, job.ID)
-			return nil
+			return false, nil
 		}
 	}
 	jobID, _, err := sch.svc.createJob(ctx, src.name, "running", fmt.Sprintf("Scheduled %s sync started (%s)", src.name, reason))
 	if err != nil {
-		return err
+		return false, err
 	}
 	runCtx, cancel := context.WithTimeout(ctx, src.timeout)
 	defer cancel()
-	return src.run(runCtx, jobID)
+	return true, src.run(runCtx, jobID)
 }
 
 // parseSyncTimes parses "08:00,20:00" into sorted minutes after midnight.
